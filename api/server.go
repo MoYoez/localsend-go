@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
-	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
+	"github.com/gin-gonic/gin"
 	"github.com/moyoez/localsend-base-protocol-golang/boardcast"
 	"github.com/moyoez/localsend-base-protocol-golang/tool"
 	"github.com/moyoez/localsend-base-protocol-golang/types"
@@ -27,6 +27,7 @@ type Server struct {
 	port     int
 	protocol string
 	handler  *Handler
+	engine   *gin.Engine
 	server   *http.Server
 	mu       sync.RWMutex
 }
@@ -266,29 +267,35 @@ func NewServer(port int, protocol string, handler *Handler) *Server {
 
 // Handler returns the HTTP handler with all registered endpoints.
 func (s *Server) Handler() http.Handler {
-	return s.buildMux()
+	return s.setupRoutes()
 }
 
-func (s *Server) buildMux() *http.ServeMux {
-	mux := http.NewServeMux()
+func (s *Server) setupRoutes() *gin.Engine {
+	gin.SetMode(gin.ReleaseMode)
+	engine := gin.New()
+	engine.Use(gin.Recovery())
 
 	// Register API endpoints
-	mux.HandleFunc("/api/localsend/v2/register", s.handleRegister)
-	mux.HandleFunc("/api/localsend/v2/prepare-upload", s.handlePrepareUpload)
-	mux.HandleFunc("/api/localsend/v2/upload", s.handleUpload)
-	mux.HandleFunc("/api/localsend/v2/cancel", s.handleCancel)
+	v2 := engine.Group("/api/localsend/v2")
+	{
+		v2.POST("/register", s.handleRegister)
+		v2.POST("/prepare-upload", s.handlePrepareUpload)
+		v2.POST("/upload", s.handleUpload)
+		v2.POST("/cancel", s.handleCancel)
+	}
 
-	return mux
+	return engine
 }
 
 // Start starts the HTTP server
 func (s *Server) Start() error {
-	mux := s.buildMux()
+	engine := s.setupRoutes()
 
 	s.mu.Lock()
+	s.engine = engine
 	s.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", s.port),
-		Handler: mux,
+		Handler: engine,
 	}
 	s.mu.Unlock()
 
@@ -344,36 +351,29 @@ func (s *Server) Stop() error {
 }
 
 // handleRegister handles the /api/localsend/v2/register endpoint
-func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	body, err := io.ReadAll(r.Body)
+func (s *Server) handleRegister(c *gin.Context) {
+	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("Failed to read register request body: %v", err)
-		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read request body"})
 		return
 	}
-	defer r.Body.Close()
 
 	// Reuse parsing function from boardcast package
 	incoming, err := boardcast.ParseVersionMessageFromBody(body)
 	if err != nil {
 		log.Errorf("Failed to parse register request: %v", err)
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
 	log.Debugf("Received register request from %s (fingerprint: %s)", incoming.Alias, incoming.Fingerprint)
 
-	remoteHost, _, splitErr := net.SplitHostPort(r.RemoteAddr)
+	remoteHost, _, splitErr := net.SplitHostPort(c.ClientIP())
 	if splitErr != nil || remoteHost == "" {
-		remoteHost = r.RemoteAddr
+		remoteHost = c.ClientIP()
 	}
 	if self := getSelfDevice(); self == nil || self.Fingerprint != incoming.Fingerprint {
-
 		cacheDiscoveredDevice(incoming, remoteHost)
 	}
 
@@ -381,43 +381,30 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	if s.handler.OnRegister != nil {
 		if err := s.handler.OnRegister(incoming); err != nil {
 			log.Errorf("Register callback error: %v", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
 	}
 
-	// Return success response
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	response := map[string]string{"status": "ok"}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Errorf("Failed to encode register response: %v", err)
-	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
 // handlePrepareUpload handles the /api/localsend/v2/prepare-upload endpoint
-func (s *Server) handlePrepareUpload(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func (s *Server) handlePrepareUpload(c *gin.Context) {
+	pin := c.Query("pin")
 
-	// Extract PIN from query parameters if present
-	pin := r.URL.Query().Get("pin")
-
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("Failed to read prepare-upload request body: %v", err)
-		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read request body"})
 		return
 	}
-	defer r.Body.Close()
 
 	// Reuse parsing function from boardcast package
 	request, err := boardcast.ParsePrepareUploadRequestFromBody(body)
 	if err != nil {
 		log.Errorf("Failed to parse prepare-upload request: %v", err)
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
@@ -430,24 +417,26 @@ func (s *Server) handlePrepareUpload(w http.ResponseWriter, r *http.Request) {
 		response, callbackErr = s.handler.OnPrepareUpload(request, pin)
 		if callbackErr != nil {
 			log.Errorf("Prepare-upload callback error: %v", callbackErr)
-			// Map common errors to HTTP status codes
-			statusCode := http.StatusInternalServerError
 			errorMsg := callbackErr.Error()
 
-			// You can customize error handling based on error types
+			// Map common errors to HTTP status codes
 			switch errorMsg {
 			case "pin required", "invalid pin":
-				statusCode = http.StatusUnauthorized
+				c.JSON(http.StatusUnauthorized, gin.H{"error": errorMsg})
+				return
 			case "rejected":
-				statusCode = http.StatusForbidden
+				c.JSON(http.StatusForbidden, gin.H{"error": errorMsg})
+				return
 			case "blocked by another session":
-				statusCode = http.StatusConflict
+				c.JSON(http.StatusConflict, gin.H{"error": errorMsg})
+				return
 			case "too many requests":
-				statusCode = http.StatusTooManyRequests
+				c.JSON(http.StatusTooManyRequests, gin.H{"error": errorMsg})
+				return
+			default:
+				c.JSON(http.StatusInternalServerError, gin.H{"error": errorMsg})
+				return
 			}
-
-			http.Error(w, errorMsg, statusCode)
-			return
 		}
 	} else {
 		// Default response if no callback is registered
@@ -461,30 +450,19 @@ func (s *Server) handlePrepareUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Return success response
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Errorf("Failed to encode prepare-upload response: %v", err)
-	}
+	c.JSON(http.StatusOK, response)
 }
 
 // handleUpload handles the /api/localsend/v2/upload endpoint
-func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Extract query parameters
-	sessionId := r.URL.Query().Get("sessionId")
-	fileId := r.URL.Query().Get("fileId")
-	token := r.URL.Query().Get("token")
+func (s *Server) handleUpload(c *gin.Context) {
+	sessionId := c.Query("sessionId")
+	fileId := c.Query("fileId")
+	token := c.Query("token")
 
 	// Validate required parameters
 	if sessionId == "" || fileId == "" || token == "" {
 		log.Errorf("Missing required parameters: sessionId=%s, fileId=%s, token=%s", sessionId, fileId, token)
-		http.Error(w, "Missing parameters", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing parameters"})
 		return
 	}
 
@@ -492,57 +470,48 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	if !isSessionValidated(sessionId) {
 		if !tool.QuerySessionIsValid(sessionId) {
 			log.Errorf("Invalid sessionId: %s", sessionId)
-			http.Error(w, "Blocked by another session", http.StatusConflict)
+			c.JSON(http.StatusConflict, gin.H{"error": "Blocked by another session"})
 			return
 		}
 		markSessionValidated(sessionId)
 	}
 
-	// Get remote address for IP validation
-	remoteAddr := r.RemoteAddr
+	remoteAddr := c.ClientIP()
 
 	log.Debugf("Received upload request: sessionId=%s, fileId=%s, token=%s, remoteAddr=%s", sessionId, fileId, token, remoteAddr)
 
 	// Call the registered callback if available
 	if s.handler.OnUpload != nil {
-		if err := s.handler.OnUpload(sessionId, fileId, token, r.Body, remoteAddr); err != nil {
+		if err := s.handler.OnUpload(sessionId, fileId, token, c.Request.Body, remoteAddr); err != nil {
 			log.Errorf("Upload callback error: %v", err)
 			errorMsg := err.Error()
 
 			// Map errors to HTTP status codes
-			statusCode := http.StatusInternalServerError
 			switch errorMsg {
 			case "Invalid token or IP address":
-				statusCode = http.StatusForbidden
+				c.JSON(http.StatusForbidden, gin.H{"error": errorMsg})
+				return
 			case "Blocked by another session":
-				statusCode = http.StatusConflict
-			case "Unknown receiver error":
-				statusCode = http.StatusInternalServerError
+				c.JSON(http.StatusConflict, gin.H{"error": errorMsg})
+				return
+			default:
+				c.JSON(http.StatusInternalServerError, gin.H{"error": errorMsg})
+				return
 			}
-
-			http.Error(w, errorMsg, statusCode)
-			return
 		}
 	}
 
-	// Return success response with no body
-	w.WriteHeader(http.StatusOK)
+	c.Status(http.StatusOK)
 }
 
 // handleCancel handles the /api/localsend/v2/cancel endpoint
-func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Extract sessionId from query parameters
-	sessionId := r.URL.Query().Get("sessionId")
+func (s *Server) handleCancel(c *gin.Context) {
+	sessionId := c.Query("sessionId")
 
 	// Validate required parameter
 	if sessionId == "" {
 		log.Errorf("Missing required parameter: sessionId")
-		http.Error(w, "Missing parameters", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing parameters"})
 		return
 	}
 
@@ -552,15 +521,11 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 	if s.handler.OnCancel != nil {
 		if err := s.handler.OnCancel(sessionId); err != nil {
 			log.Errorf("Cancel callback error: %v", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
 	}
 
-	// Destroy session on cancel
-
 	removeUploadSession(sessionId)
-
-	// Return success response with no body
-	w.WriteHeader(http.StatusOK)
+	c.Status(http.StatusOK)
 }

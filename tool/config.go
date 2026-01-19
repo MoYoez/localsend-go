@@ -7,7 +7,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const DefaultConfigPath = "config.yaml"
+var (
+	DefaultConfigPath = "config.yaml"
+)
 
 type AppConfig struct {
 	Alias       string `yaml:"alias"`
