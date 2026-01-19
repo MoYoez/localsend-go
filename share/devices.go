@@ -16,7 +16,7 @@ type UserScanCurrentItem struct {
 }
 
 const (
-	DefaultTTL = 30 * time.Second
+	DefaultTTL = 120 * time.Second
 )
 
 var (
