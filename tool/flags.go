@@ -9,6 +9,7 @@ type Config struct {
 	UseMultcastPort        int
 	UseConfigPath          string
 	UseDefaultUploadFolder string
+	UseLegacyMode          bool
 }
 
 // SetFlags parses CLI flags and returns the override config.
@@ -19,5 +20,6 @@ func SetFlags() Config {
 	flag.IntVar(&cfg.UseMultcastPort, "useMultcastPort", 0, "override multicast port")
 	flag.StringVar(&cfg.UseConfigPath, "useConfigPath", "", "override config file path")
 	flag.StringVar(&cfg.UseDefaultUploadFolder, "useDefaultUploadFolder", "", "override default upload folder")
+	flag.BoolVar(&cfg.UseLegacyMode, "useLegacyMode", false, "use legacy HTTP mode to scan devices (scan every 30 seconds)")
 	return cfg
 }

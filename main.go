@@ -61,8 +61,14 @@ func main() {
 		}
 	}()
 
-	go boardcast.ListenMulticastUsingUDP(message)
-	go boardcast.SendMulticastUsingUDP(message)
+	if cfg.UseLegacyMode {
+		log.Info("Using Legacy Mode: HTTP scanning (scanning every 30 seconds)")
+		go boardcast.ListenMulticastUsingHTTP(message)
+	} else {
+		log.Info("Using UDP multicast mode")
+		go boardcast.ListenMulticastUsingUDP(message)
+		go boardcast.SendMulticastUsingUDP(message)
+	}
 
 	select {}
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/charmbracelet/log"
+	"github.com/moyoez/localsend-base-protocol-golang/share"
 	"github.com/moyoez/localsend-base-protocol-golang/tool"
 	"github.com/moyoez/localsend-base-protocol-golang/types"
 )
@@ -81,7 +82,7 @@ func ListenMulticastUsingUDP(self *types.VersionMessage) {
 				log.Errorf("Unexpected UDP address: %v\n", castErr)
 				continue
 			}
-
+			share.SetUserScanCurrent(incoming.Fingerprint, incoming)
 			go func(remote types.VersionMessage, remoteAddr *net.UDPAddr) {
 				// Call the /register callback using HTTP/TCP to send the device information to the remote device.
 				if callbackErr := CallbackMulticastMessageUsingTCP(remoteAddr, self, &remote); callbackErr != nil {
@@ -89,6 +90,7 @@ func ListenMulticastUsingUDP(self *types.VersionMessage) {
 				}
 			}(incoming, udpAddr)
 		} else {
+			// error reading from udp, consider using http.
 			log.Errorf("Error reading from UDP: %v\n", err)
 		}
 	}
@@ -252,32 +254,73 @@ func IsAddrNotAvailableError(err error) bool {
 		strings.Contains(msg, "address not available")
 }
 
+// generateNetworkIPs generates all IP addresses in the given network.
+// For /24 networks, it generates IPs from .1 to .254
+// For larger networks, it limits to 254 IPs to avoid excessive scanning.
+func generateNetworkIPs(ipnet *net.IPNet) []string {
+	var ips []string
+	ip := ipnet.IP.To4()
+	if ip == nil {
+		return ips
+	}
+
+	mask := ipnet.Mask
+	network := ip.Mask(mask)
+
+	// Calculate the number of host bits
+	ones, bits := mask.Size()
+	if bits != 32 {
+		return ips
+	}
+	hostBits := 32 - ones
+
+	// Limit to 254 hosts to avoid excessive scanning
+	maxHosts := 254
+	if hostBits < 8 {
+		// For smaller networks, use actual host count
+		maxHosts = (1 << hostBits) - 2 // -2 for network and broadcast
+	}
+
+	// Generate IPs by incrementing the host part
+	for i := 1; i <= maxHosts; i++ {
+		ip := make(net.IP, 4)
+		copy(ip, network)
+
+		// Calculate host part based on network size
+		if hostBits <= 8 {
+			// Simple case: host part is in last octet only
+			ip[3] = network[3] + byte(i)
+		} else if hostBits <= 16 {
+			// Host part spans last two octets
+			ip[3] = network[3] + byte(i&0xff)
+			ip[2] = network[2] + byte((i>>8)&0xff)
+		} else {
+			// Host part spans last three octets
+			ip[3] = network[3] + byte(i&0xff)
+			ip[2] = network[2] + byte((i>>8)&0xff)
+			ip[1] = network[1] + byte((i>>16)&0xff)
+		}
+
+		// Skip if it equals the network address
+		if ip.Equal(network) {
+			continue
+		}
+
+		ips = append(ips, ip.String())
+	}
+	return ips
+}
+
 // Legacy: HTTP-only fallback for devices that don't support UDP multicast.
 // If multicast fails, send an HTTP POST to /api/localsend/v2/register on all local IPs to discover devices.
+// This function runs in a loop, scanning every 30 seconds.
 func ListenMulticastUsingHTTP(self *types.VersionMessage) {
 	if self == nil {
 		log.Warn("ListenMulticastUsingHTTP: self is nil")
 		return
 	}
 
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		log.Warnf("ListenMulticastUsingHTTP: failed to enumerate interface addresses: %v", err)
-		return
-	}
-
-	var targets []string
-	for _, addr := range addrs {
-		ipnet, ok := addr.(*net.IPNet)
-		if !ok || ipnet.IP.IsLoopback() || ipnet.IP.To4() == nil {
-			continue
-		}
-		targets = append(targets, ipnet.IP.String())
-	}
-	if len(targets) == 0 {
-		log.Warn("ListenMulticastUsingHTTP: no usable local IPv4 addresses found")
-		return
-	}
+	log.Info("Starting Legacy Mode HTTP scanning (scanning every 30 seconds)")
 
 	payloadBytes, err := sonic.Marshal(self)
 	if err != nil {
@@ -285,41 +328,83 @@ func ListenMulticastUsingHTTP(self *types.VersionMessage) {
 		return
 	}
 
-	for _, ip := range targets {
-		url := fmt.Sprintf("http://%s:%d/api/localsend/v2/register", ip, multcastPort)
-		req, err := http.NewRequest("POST", url, bytes.NewReader(payloadBytes))
-		if err != nil {
-			log.Warnf("ListenMulticastUsingHTTP: failed to create request for %s: %v", url, err)
-			continue
-		}
-		req.Header.Set("Content-Type", "application/json")
-		client := &http.Client{Timeout: 2 * time.Second}
-		resp, err := client.Do(req)
-		if err != nil {
-			log.Debugf("ListenMulticastUsingHTTP: POST to %s failed: %v", url, err)
-			continue
-		}
-		func() {
-			defer resp.Body.Close()
-			if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-				log.Debugf("ListenMulticastUsingHTTP: POST to %s failed with status: %s", url, resp.Status)
-				return
-			}
+	// Scan loop: every 30 seconds
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
 
-			// Parse response body
-			var remote types.VersionMessage
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				log.Debugf("ListenMulticastUsingHTTP: failed reading response from %s: %v", url, err)
-				return
+	// Perform initial scan immediately
+	scanOnce := func() {
+		addrs, err := net.InterfaceAddrs()
+		if err != nil {
+			log.Warnf("ListenMulticastUsingHTTP: failed to enumerate interface addresses: %v", err)
+			return
+		}
+
+		var targets []string
+		for _, addr := range addrs {
+			ipnet, ok := addr.(*net.IPNet)
+			if !ok || ipnet.IP.IsLoopback() || ipnet.IP.To4() == nil {
+				continue
 			}
-			if err := sonic.Unmarshal(body, &remote); err != nil {
-				log.Debugf("ListenMulticastUsingHTTP: failed to unmarshal response from %s: %v", url, err)
-				return
-			}
-			log.Infof("ListenMulticastUsingHTTP: received device response from %s: %+v", url, remote)
-			// Optionally: act on `remote`
-		}()
+			// Generate all IPs in the network
+			networkIPs := generateNetworkIPs(ipnet)
+			targets = append(targets, networkIPs...)
+		}
+		if len(targets) == 0 {
+			log.Warn("ListenMulticastUsingHTTP: no usable local IPv4 addresses found")
+			return
+		}
+
+		log.Debugf("ListenMulticastUsingHTTP: scanning %d IP addresses", len(targets))
+
+		// Scan all targets concurrently
+		for _, ip := range targets {
+			go func(targetIP string) {
+				url := fmt.Sprintf("http://%s:%d/api/localsend/v2/register", targetIP, multcastPort)
+				req, err := http.NewRequest("POST", url, bytes.NewReader(payloadBytes))
+				if err != nil {
+					log.Debugf("ListenMulticastUsingHTTP: failed to create request for %s: %v", url, err)
+					return
+				}
+				req.Header.Set("Content-Type", "application/json")
+				client := &http.Client{Timeout: 2 * time.Second}
+				resp, err := client.Do(req)
+				if err != nil {
+					// Silently ignore connection errors (most IPs won't have devices)
+					return
+				}
+				defer resp.Body.Close()
+				if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+					log.Debugf("ListenMulticastUsingHTTP: POST to %s failed with status: %s", url, resp.Status)
+					return
+				}
+
+				// Parse response body
+				var remote types.VersionMessage
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					log.Debugf("ListenMulticastUsingHTTP: failed reading response from %s: %v", url, err)
+					return
+				}
+				if err := sonic.Unmarshal(body, &remote); err != nil {
+					log.Debugf("ListenMulticastUsingHTTP: failed to unmarshal response from %s: %v", url, err)
+					return
+				}
+				log.Infof("ListenMulticastUsingHTTP: discovered device at %s: %s (fingerprint: %s)", url, remote.Alias, remote.Fingerprint)
+				// Store the discovered device
+				if remote.Fingerprint != "" {
+					share.SetUserScanCurrent(remote.Fingerprint, remote)
+				}
+			}(ip)
+		}
+	}
+
+	// Initial scan
+	scanOnce()
+
+	// Continue scanning every 30 seconds
+	for range ticker.C {
+		scanOnce()
 	}
 }
 
