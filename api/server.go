@@ -33,6 +33,12 @@ func SetSelfDevice(device *types.VersionMessage) {
 	models.SetSelfDevice(device)
 }
 
+// SetDefaultUploadFolder sets the default upload folder for both api and models packages
+func SetDefaultUploadFolder(folder string) {
+	DefaultUploadFolder = folder
+	models.DefaultUploadFolder = folder
+}
+
 func init() {
 	models.DefaultUploadFolder = DefaultUploadFolder
 }
