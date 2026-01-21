@@ -22,18 +22,8 @@ import (
 
 // UserPrepareUploadRequest represents the prepare upload request
 type UserPrepareUploadRequest struct {
-	TargetTo string               `json:"targetTo"` // Target device identifier
-	Files    map[string]FileInput `json:"files"`    // File metadata map, key is fileId
-}
-
-// FileInput represents file input information
-type FileInput struct {
-	ID       string `json:"id"`                // File ID
-	FileName string `json:"fileName"`          // File name
-	Size     int64  `json:"size"`              // File size in bytes
-	FileType string `json:"fileType"`          // File type, e.g., "image/jpeg"
-	SHA256   string `json:"sha256,omitempty"`  // SHA256 hash value (optional)
-	Preview  string `json:"preview,omitempty"` // Preview data (optional)
+	TargetTo string                     `json:"targetTo"` // Target device identifier
+	Files    map[string]types.FileInput `json:"files"`    // File metadata map, key is fileId
 }
 
 // UserUploadRequest represents the actual upload request
@@ -114,6 +104,22 @@ func UserPrepareUpload(c *gin.Context) {
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Target device not found"})
 		return
+	}
+
+	// Process each file input and auto-fill information from fileUrl if provided
+	tool.DefaultLogger.Infof("Processing %d files for prepare-upload", len(request.Files))
+	for fileID, fileInput := range request.Files {
+		// Process file input (auto-fill from fileUrl if provided)
+		if err := tool.ProcessFileInput(&fileInput); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":  fmt.Sprintf("Failed to process file %s: %v", fileID, err),
+				"fileId": fileID,
+			})
+			return
+		}
+		// Update the map with processed file input
+		request.Files[fileID] = fileInput
+		tool.DefaultLogger.Infof("File %s: %s (%d bytes, %s)", fileID, fileInput.FileName, fileInput.Size, fileInput.FileType)
 	}
 
 	// Build file info map

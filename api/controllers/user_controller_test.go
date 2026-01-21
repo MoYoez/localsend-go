@@ -17,14 +17,14 @@ import (
 func setupRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	
+
 	self := router.Group("/api/self/v1")
 	{
 		self.GET("/scan-current", UserScanCurrent)
 		self.POST("/prepare-upload", UserPrepareUpload)
 		self.POST("/upload", UserUpload)
 	}
-	
+
 	return router
 }
 
@@ -73,7 +73,7 @@ func TestUserPrepareUpload(t *testing.T) {
 	// Test request body
 	requestBody := UserPrepareUploadRequest{
 		TargetTo: "test-target-1",
-		Files: map[string]FileInput{
+		Files: map[string]types.FileInput{
 			"file-1": {
 				ID:       "file-1",
 				FileName: "test.txt",
@@ -123,7 +123,7 @@ func TestUserPrepareUploadInvalidTarget(t *testing.T) {
 
 	requestBody := UserPrepareUploadRequest{
 		TargetTo: "non-existent-target",
-		Files: map[string]FileInput{
+		Files: map[string]types.FileInput{
 			"file-1": {
 				ID:       "file-1",
 				FileName: "test.txt",
@@ -206,7 +206,7 @@ func TestUserPrepareUploadAndUpload(t *testing.T) {
 	// Step 1: Prepare upload
 	prepareRequestBody := UserPrepareUploadRequest{
 		TargetTo: "test-target-1",
-		Files: map[string]FileInput{
+		Files: map[string]types.FileInput{
 			"file-1": {
 				ID:       "file-1",
 				FileName: "test.txt",
