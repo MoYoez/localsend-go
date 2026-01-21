@@ -14,7 +14,7 @@ This is a server-client implementation of the [LocalSend Protocol](https://githu
 
 This implementation provides a Go-based server and client that follows the LocalSend Protocol v2.1 specification.
 
-Actually it used for [decky-plugin-localsend](https://github.com/moyoez/decky-plugin-localsend)
+Actually it used for [decky-localsend](https://github.com/moyoez/decky-localsend)
 
 ### Features
 

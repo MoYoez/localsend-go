@@ -10,7 +10,7 @@
 
 本实现提供了一个基于 Go 的服务器和客户端，遵循 LocalSend 协议 v2.1 规范。
 
-实际上这是为 [decky-plugin-localsend](https://github.com/moyoez/decky-plugin-localsend) 编写的工具
+实际上这是为 [decky-localsend](https://github.com/moyoez/decky-localsend) 编写的工具
 
 ## 功能特性
 
