@@ -6,6 +6,7 @@ import (
 	"maps"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -22,10 +23,11 @@ var (
 
 // Notification represents a notification message structure
 type Notification struct {
-	Type    string                 `json:"type,omitempty"`    // Notification type, e.g. "upload_start", "upload_end", etc.
-	Title   string                 `json:"title,omitempty"`   // Notification title
-	Message string                 `json:"message,omitempty"` // Notification message/content
-	Data    map[string]interface{} `json:"data,omitempty"`    // Additional data fields
+	Type       string                 `json:"type,omitempty"`       // Notification type, e.g. "upload_start", "upload_end", etc.
+	Title      string                 `json:"title,omitempty"`      // Notification title
+	Message    string                 `json:"message,omitempty"`    // Notification message/content
+	Data       map[string]interface{} `json:"data,omitempty"`       // Additional data fields
+	IsTextOnly bool                   `json:"isTextOnly,omitempty"` // Indicates if this is plain text content
 }
 
 // SendNotification sends notification via Unix Domain Socket
@@ -117,14 +119,34 @@ func SendUploadNotification(eventType, sessionId, fileId string, fileInfo map[st
 		maps.Copy(notification.Data, fileInfo)
 	}
 
+	// Check if this is plain text content
+	if fileInfo != nil {
+		if fileType, ok := fileInfo["fileType"].(string); ok {
+			notification.IsTextOnly = isPlainTextType(fileType)
+			if notification.IsTextOnly {
+				tool.DefaultLogger.Infof("[Notify] Detected plain text content: fileType=%s", fileType)
+			}
+		}
+	}
+
 	// Set title and message based on event type
 	switch eventType {
 	case "upload_start":
-		notification.Title = "Upload Started"
-		notification.Message = fmt.Sprintf("File upload started: sessionId=%s, fileId=%s", sessionId, fileId)
+		if notification.IsTextOnly {
+			notification.Title = "Text Upload Started"
+			notification.Message = fmt.Sprintf("Text content upload started: sessionId=%s, fileId=%s", sessionId, fileId)
+		} else {
+			notification.Title = "Upload Started"
+			notification.Message = fmt.Sprintf("File upload started: sessionId=%s, fileId=%s", sessionId, fileId)
+		}
 	case "upload_end":
-		notification.Title = "Upload Completed"
-		notification.Message = fmt.Sprintf("File upload completed: sessionId=%s, fileId=%s", sessionId, fileId)
+		if notification.IsTextOnly {
+			notification.Title = "Text Upload Completed"
+			notification.Message = fmt.Sprintf("Text content upload completed: sessionId=%s, fileId=%s", sessionId, fileId)
+		} else {
+			notification.Title = "Upload Completed"
+			notification.Message = fmt.Sprintf("File upload completed: sessionId=%s, fileId=%s", sessionId, fileId)
+		}
 	default:
 		notification.Title = "Upload Event"
 		notification.Message = fmt.Sprintf("Upload event: %s, sessionId=%s, fileId=%s", eventType, sessionId, fileId)
@@ -153,4 +175,39 @@ func SetUnixSocketPath(path string) {
 func SetUnixSocketTimeout(timeout time.Duration) {
 	UnixSocketTimeout = timeout
 	tool.DefaultLogger.Infof("Unix socket timeout set to: %v", timeout)
+}
+
+// isPlainTextType checks if the given file type is a plain text type
+func isPlainTextType(fileType string) bool {
+	if fileType == "" {
+		return false
+	}
+	
+	fileType = strings.ToLower(strings.TrimSpace(fileType))
+	
+	// Common plain text MIME types
+	plainTextTypes := []string{
+		"text/plain",
+		"text/txt",
+		"application/txt",
+		"text/x-log",
+		"text/x-markdown",
+		"text/markdown",
+		"text/x-diff",
+		"text/x-patch",
+	}
+	
+	// Check exact match
+	for _, textType := range plainTextTypes {
+		if fileType == textType {
+			return true
+		}
+	}
+	
+	// Check if it starts with "text/"
+	if strings.HasPrefix(fileType, "text/") {
+		return true
+	}
+	
+	return false
 }
