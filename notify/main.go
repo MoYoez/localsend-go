@@ -6,6 +6,7 @@ import (
 	"maps"
 	"net"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -182,9 +183,9 @@ func isPlainTextType(fileType string) bool {
 	if fileType == "" {
 		return false
 	}
-	
+
 	fileType = strings.ToLower(strings.TrimSpace(fileType))
-	
+
 	// Common plain text MIME types
 	plainTextTypes := []string{
 		"text/plain",
@@ -196,18 +197,16 @@ func isPlainTextType(fileType string) bool {
 		"text/x-diff",
 		"text/x-patch",
 	}
-	
+
 	// Check exact match
-	for _, textType := range plainTextTypes {
-		if fileType == textType {
-			return true
-		}
+	if slices.Contains(plainTextTypes, fileType) {
+		return true
 	}
-	
+
 	// Check if it starts with "text/"
 	if strings.HasPrefix(fileType, "text/") {
 		return true
 	}
-	
+
 	return false
 }
