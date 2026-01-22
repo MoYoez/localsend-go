@@ -16,15 +16,6 @@ This implementation provides a Go-based server and client that follows the Local
 
 Actually it used for [decky-localsend](https://github.com/moyoez/decky-localsend)
 
-### Features
-
-- ✅ Full implementation of LocalSend Protocol v2.1
-- ✅ HTTP/HTTPS server support
-- ✅ UDP multicast discovery
-- ✅ File upload/download capabilities
-- ✅ Device registration and discovery
-- ✅ Session management
-- ✅ TLS/SSL support with self-signed certificates
 
 ### Project Structure
 

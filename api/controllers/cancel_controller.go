@@ -24,7 +24,7 @@ func (ctrl *CancelController) HandleCancel(c *gin.Context) {
 
 	if sessionId == "" {
 		tool.DefaultLogger.Errorf("Missing required parameter: sessionId")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing parameters"})
+		c.JSON(http.StatusBadRequest, tool.FastReturnError("Missing parameters"))
 		return
 	}
 
@@ -34,7 +34,7 @@ func (ctrl *CancelController) HandleCancel(c *gin.Context) {
 		tool.DefaultLogger.Infof("[Cancel] Processing cancel callback for session: %s", sessionId)
 		if err := ctrl.handler.OnCancel(sessionId); err != nil {
 			tool.DefaultLogger.Errorf("[Cancel] Cancel callback error: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			c.JSON(http.StatusInternalServerError, tool.FastReturnError("Internal server error"))
 			return
 		}
 		tool.DefaultLogger.Infof("[Cancel] Successfully cancelled session: %s", sessionId)

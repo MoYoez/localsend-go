@@ -25,14 +25,14 @@ func (ctrl *RegisterController) HandleRegister(c *gin.Context) {
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		tool.DefaultLogger.Errorf("Failed to read register request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read request body"})
+		c.JSON(http.StatusBadRequest, tool.FastReturnError("Failed to read request body"))
 		return
 	}
 
 	incoming, err := boardcast.ParseVersionMessageFromBody(body)
 	if err != nil {
 		tool.DefaultLogger.Errorf("Failed to parse register request: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		c.JSON(http.StatusBadRequest, tool.FastReturnError("Invalid request body"))
 		return
 	}
 
@@ -47,11 +47,11 @@ func (ctrl *RegisterController) HandleRegister(c *gin.Context) {
 		tool.DefaultLogger.Infof("[Register] Processing register callback for device: %s", incoming.Alias)
 		if err := ctrl.handler.OnRegister(incoming); err != nil {
 			tool.DefaultLogger.Errorf("[Register] Register callback error: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			c.JSON(http.StatusInternalServerError, tool.FastReturnError("Internal server error"))
 			return
 		}
 		tool.DefaultLogger.Infof("[Register] Successfully registered device: %s", incoming.Alias)
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	c.JSON(http.StatusOK, tool.FastReturnSuccess())
 }

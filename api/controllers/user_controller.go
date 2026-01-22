@@ -86,7 +86,7 @@ func UserScanCurrent(c *gin.Context) {
 		}
 		values = append(values, item)
 	}
-	c.JSON(http.StatusOK, gin.H{"data": values})
+	c.JSON(http.StatusOK, tool.FastReturnSuccessWithData(values))
 }
 
 // UserPrepareUpload handles prepare upload request
@@ -95,14 +95,14 @@ func UserScanCurrent(c *gin.Context) {
 func UserPrepareUpload(c *gin.Context) {
 	var request UserPrepareUploadRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body: " + err.Error()})
+		c.JSON(http.StatusBadRequest, tool.FastReturnError("Invalid request body: "+err.Error()))
 		return
 	}
 
 	// Validate target device exists
 	targetItem, ok := share.GetUserScanCurrent(request.TargetTo)
 	if !ok {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Target device not found"})
+		c.JSON(http.StatusNotFound, tool.FastReturnError("Target device not found"))
 		return
 	}
 
@@ -111,10 +111,9 @@ func UserPrepareUpload(c *gin.Context) {
 	for fileID, fileInput := range request.Files {
 		// Process file input (auto-fill from fileUrl if provided)
 		if err := tool.ProcessFileInput(&fileInput); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":  fmt.Sprintf("Failed to process file %s: %v", fileID, err),
+			c.JSON(http.StatusBadRequest, tool.FastReturnErrorWithData(fmt.Sprintf("Failed to process file %s: %v", fileID, err), map[string]any{
 				"fileId": fileID,
-			})
+			}))
 			return
 		}
 		// Update the map with processed file input
@@ -138,7 +137,7 @@ func UserPrepareUpload(c *gin.Context) {
 	// Get local device information
 	selfDevice := models.GetSelfDevice()
 	if selfDevice == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Local device information not configured"})
+		c.JSON(http.StatusInternalServerError, tool.FastReturnError("Local device information not configured"))
 		return
 	}
 
@@ -175,10 +174,10 @@ func UserPrepareUpload(c *gin.Context) {
 		// Check if it's a PIN-related error
 		errorMsgLower := strings.ToLower(errorMsg)
 		if strings.Contains(errorMsgLower, "pin required") || strings.Contains(errorMsgLower, "invalid pin") {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "PIN required / Invalid PIN"})
+			c.JSON(http.StatusUnauthorized, tool.FastReturnError("PIN required / Invalid PIN"))
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Prepare upload failed: " + errorMsg})
+		c.JSON(http.StatusInternalServerError, tool.FastReturnError("Prepare upload failed: "+errorMsg))
 		return
 	}
 
@@ -199,12 +198,10 @@ func UserPrepareUpload(c *gin.Context) {
 	UserUploadSessions.Set(prepareResponse.SessionId, sessionInfo)
 
 	// Return result
-	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"sessionId": prepareResponse.SessionId,
-			"files":     prepareResponse.Files,
-		},
-	})
+	c.JSON(http.StatusOK, tool.FastReturnSuccessWithData(map[string]any{
+		"sessionId": prepareResponse.SessionId,
+		"files":     prepareResponse.Files,
+	}))
 }
 
 // UserUpload handles actual file upload request
@@ -224,7 +221,7 @@ func UserUpload(c *gin.Context) {
 		// JSON request format (supports file:/// protocol)
 		var request UserUploadRequest
 		if err := c.ShouldBindJSON(&request); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON request: " + err.Error()})
+			c.JSON(http.StatusBadRequest, tool.FastReturnError("Invalid JSON request: "+err.Error()))
 			return
 		}
 
@@ -235,7 +232,7 @@ func UserUpload(c *gin.Context) {
 
 		// Validate required parameters
 		if sessionId == "" || fileId == "" || token == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing required parameters: sessionId, fileId, token"})
+			c.JSON(http.StatusBadRequest, tool.FastReturnError("Missing required parameters: sessionId, fileId, token"))
 			return
 		}
 
@@ -243,7 +240,7 @@ func UserUpload(c *gin.Context) {
 		if fileUrl != "" {
 			parsedUrl, err := url.Parse(fileUrl)
 			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid fileUrl: " + err.Error()})
+				c.JSON(http.StatusBadRequest, tool.FastReturnError("Invalid fileUrl: "+err.Error()))
 				return
 			}
 
@@ -255,17 +252,19 @@ func UserUpload(c *gin.Context) {
 				// Read file from local filesystem
 				data, err := os.ReadFile(filePath)
 				if err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Failed to read file from %s: %v", filePath, err)})
+					c.JSON(http.StatusBadRequest, tool.FastReturnErrorWithData(fmt.Sprintf("Failed to read file from %s: %v", filePath, err), map[string]any{
+						"filePath": filePath,
+					}))
 					return
 				}
 				fileData = data
 				tool.DefaultLogger.Infof("Successfully read %d bytes from %s", len(fileData), filePath)
 			} else {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "Only file:// protocol is supported for fileUrl"})
+				c.JSON(http.StatusBadRequest, tool.FastReturnError("Only file:// protocol is supported for fileUrl"))
 				return
 			}
 		} else {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "fileUrl is required in JSON request"})
+			c.JSON(http.StatusBadRequest, tool.FastReturnError("fileUrl is required in JSON request"))
 			return
 		}
 	} else {
@@ -276,14 +275,14 @@ func UserUpload(c *gin.Context) {
 
 		// Validate required parameters
 		if sessionId == "" || fileId == "" || token == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing required query parameters: sessionId, fileId, token"})
+			c.JSON(http.StatusBadRequest, tool.FastReturnError("Missing required query parameters: sessionId, fileId, token"))
 			return
 		}
 
 		// Read file data from request body (binary data)
 		data, err := io.ReadAll(c.Request.Body)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read file data: " + err.Error()})
+			c.JSON(http.StatusBadRequest, tool.FastReturnError("Failed to read file data: "+err.Error()))
 			return
 		}
 		defer c.Request.Body.Close()
@@ -292,21 +291,21 @@ func UserUpload(c *gin.Context) {
 
 	// Validate file data
 	if len(fileData) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "File data is empty"})
+		c.JSON(http.StatusBadRequest, tool.FastReturnError("File data is empty"))
 		return
 	}
 
 	// Get user upload session information
 	sessionInfo := UserUploadSessions.Get(sessionId)
 	if sessionInfo.SessionId == "" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Session not found or expired"})
+		c.JSON(http.StatusNotFound, tool.FastReturnError("Session not found or expired"))
 		return
 	}
 
 	// Validate token matches
 	expectedToken, ok := sessionInfo.Tokens[fileId]
 	if !ok || expectedToken != token {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Invalid file ID or token"})
+		c.JSON(http.StatusForbidden, tool.FastReturnError("Invalid file ID or token"))
 		return
 	}
 
@@ -333,7 +332,7 @@ func UserUpload(c *gin.Context) {
 
 	if err != nil {
 		tool.DefaultLogger.Errorf("File upload failed: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "File upload failed: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, tool.FastReturnError("File upload failed: "+err.Error()))
 		return
 	}
 
@@ -347,25 +346,25 @@ func UserUpload(c *gin.Context) {
 func UserUploadBatch(c *gin.Context) {
 	var request UserUploadBatchRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON request: " + err.Error()})
+		c.JSON(http.StatusBadRequest, tool.FastReturnError("Invalid JSON request: "+err.Error()))
 		return
 	}
 
 	// Validate required parameters
 	if request.SessionId == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing required parameter: sessionId"})
+		c.JSON(http.StatusBadRequest, tool.FastReturnError("Missing required parameter: sessionId"))
 		return
 	}
 
 	if len(request.Files) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No files provided"})
+		c.JSON(http.StatusBadRequest, tool.FastReturnError("No files provided"))
 		return
 	}
 
 	// Get user upload session information
 	sessionInfo := UserUploadSessions.Get(request.SessionId)
 	if sessionInfo.SessionId == "" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Session not found or expired"})
+		c.JSON(http.StatusNotFound, tool.FastReturnError("Session not found or expired"))
 		return
 	}
 

@@ -12,15 +12,6 @@
 
 实际上这是为 [decky-localsend](https://github.com/moyoez/decky-localsend) 编写的工具
 
-## 功能特性
-
-- ✅ 完整实现 LocalSend 协议 v2.1
-- ✅ HTTP/HTTPS 服务器支持
-- ✅ UDP 组播发现
-- ✅ 文件上传/下载功能
-- ✅ 设备注册和发现
-- ✅ 会话管理
-- ✅ TLS/SSL 支持（自签名证书）
 
 ## 项目结构
 

@@ -26,14 +26,14 @@ func (ctrl *UploadController) HandlePrepareUpload(c *gin.Context) {
 	body, err := c.GetRawData()
 	if err != nil {
 		tool.DefaultLogger.Errorf("Failed to read prepare-upload request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read request body"})
+		c.JSON(http.StatusBadRequest, tool.FastReturnError("Failed to read request body"))
 		return
 	}
 
 	request, err := models.ParsePrepareUploadRequest(body)
 	if err != nil {
 		tool.DefaultLogger.Errorf("Failed to parse prepare-upload request: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		c.JSON(http.StatusBadRequest, tool.FastReturnError("Invalid request body"))
 		return
 	}
 
@@ -46,30 +46,31 @@ func (ctrl *UploadController) HandlePrepareUpload(c *gin.Context) {
 		var callbackErr error
 		response, callbackErr = ctrl.handler.OnPrepareUpload(request, pin)
 		if callbackErr != nil {
-			tool.DefaultLogger.Errorf("Prepare-upload callback error: %v", callbackErr)
+			tool.DefaultLogger.Errorf("[PrepareUpload] Prepare-upload callback error: %v", callbackErr)
 			errorMsg := callbackErr.Error()
 
 			switch errorMsg {
 			case "PIN required", "Invalid PIN", "pin required", "invalid pin":
 				// Return standardized error message
-				if errorMsg == "pin required" {
+				switch errorMsg {
+				case "pin required":
 					errorMsg = "PIN required"
-				} else if errorMsg == "invalid pin" {
+				case "invalid pin":
 					errorMsg = "Invalid PIN"
 				}
-				c.JSON(http.StatusUnauthorized, gin.H{"error": errorMsg})
+				c.JSON(http.StatusUnauthorized, tool.FastReturnError(errorMsg))
 				return
 			case "rejected":
-				c.JSON(http.StatusForbidden, gin.H{"error": errorMsg})
+				c.JSON(http.StatusForbidden, tool.FastReturnError(errorMsg))
 				return
 			case "blocked by another session":
-				c.JSON(http.StatusConflict, gin.H{"error": errorMsg})
+				c.JSON(http.StatusConflict, tool.FastReturnError(errorMsg))
 				return
 			case "too many requests":
-				c.JSON(http.StatusTooManyRequests, gin.H{"error": errorMsg})
+				c.JSON(http.StatusTooManyRequests, tool.FastReturnError(errorMsg))
 				return
 			default:
-				c.JSON(http.StatusInternalServerError, gin.H{"error": errorMsg})
+				c.JSON(http.StatusInternalServerError, tool.FastReturnError(errorMsg))
 				return
 			}
 		}
@@ -87,14 +88,14 @@ func (ctrl *UploadController) HandlePrepareUpload(c *gin.Context) {
 	if response != nil && response.SessionId != "" {
 		for fileID := range request.Files {
 			fileInfo := request.Files[fileID]
-			fileData := map[string]interface{}{
+			fileData := map[string]any{
 				"fileName": fileInfo.FileName,
 				"size":     fileInfo.Size,
 				"fileType": fileInfo.FileType,
 				"sha256":   fileInfo.SHA256,
 			}
 			// Send notification asynchronously to avoid blocking the response
-			go func(sessionId, fileId string, data map[string]interface{}) {
+			go func(sessionId, fileId string, data map[string]any) {
 				tool.DefaultLogger.Infof("[Notify] Sending upload_start notification: sessionId=%s, fileId=%s, fileName=%s",
 					sessionId, fileId, data["fileName"])
 				if err := notify.SendUploadNotification("upload_start", sessionId, fileId, data); err != nil {
@@ -117,14 +118,14 @@ func (ctrl *UploadController) HandleUpload(c *gin.Context) {
 
 	if sessionId == "" || fileId == "" || token == "" {
 		tool.DefaultLogger.Errorf("Missing required parameters: sessionId=%s, fileId=%s, token=%s", sessionId, fileId, token)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing parameters"})
+		c.JSON(http.StatusBadRequest, tool.FastReturnError("Missing parameters"))
 		return
 	}
 
 	if !models.IsSessionValidated(sessionId) {
 		if !tool.QuerySessionIsValid(sessionId) {
 			tool.DefaultLogger.Errorf("Invalid sessionId: %s", sessionId)
-			c.JSON(http.StatusConflict, gin.H{"error": "Blocked by another session"})
+			c.JSON(http.StatusConflict, tool.FastReturnError("Blocked by another session"))
 			return
 		}
 		models.MarkSessionValidated(sessionId)
@@ -136,24 +137,24 @@ func (ctrl *UploadController) HandleUpload(c *gin.Context) {
 	if ctrl.handler != nil {
 		tool.DefaultLogger.Infof("[Upload] Processing upload callback for fileId: %s", fileId)
 		if err := ctrl.handler.OnUpload(sessionId, fileId, token, c.Request.Body, remoteAddr); err != nil {
-			tool.DefaultLogger.Errorf("Upload callback error: %v", err)
+			tool.DefaultLogger.Errorf("[Upload] Upload callback error: %v", err)
 			errorMsg := err.Error()
 
 			switch errorMsg {
 			case "Invalid token or IP address":
-				c.JSON(http.StatusForbidden, gin.H{"error": errorMsg})
+				c.JSON(http.StatusForbidden, tool.FastReturnError(errorMsg))
 				return
 			case "Blocked by another session":
-				c.JSON(http.StatusConflict, gin.H{"error": errorMsg})
+				c.JSON(http.StatusConflict, tool.FastReturnError(errorMsg))
 				return
 			default:
-				c.JSON(http.StatusInternalServerError, gin.H{"error": errorMsg})
+				c.JSON(http.StatusInternalServerError, tool.FastReturnError(errorMsg))
 				return
 			}
 		} else {
 			// Upload successful, send upload end notification
 			fileInfo, ok := models.LookupFileInfo(sessionId, fileId)
-			fileData := make(map[string]interface{})
+			fileData := make(map[string]any)
 			fileName := "unknown"
 			if ok {
 				fileData["fileName"] = fileInfo.FileName
@@ -163,7 +164,7 @@ func (ctrl *UploadController) HandleUpload(c *gin.Context) {
 				fileName = fileInfo.FileName
 			}
 			// Send notification asynchronously to avoid blocking the response
-			go func(sessionId, fileId string, data map[string]interface{}, fName string) {
+			go func(sessionId, fileId string, data map[string]any, fName string) {
 				tool.DefaultLogger.Infof("[Notify] Sending upload_end notification: sessionId=%s, fileId=%s, fileName=%s",
 					sessionId, fileId, fName)
 				if err := notify.SendUploadNotification("upload_end", sessionId, fileId, data); err != nil {

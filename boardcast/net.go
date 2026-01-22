@@ -482,9 +482,8 @@ func ParsePrepareUploadRequestFromBody(body []byte) (*types.PrepareUploadRequest
 	return &request, nil
 }
 
-// ShouldRespond determines if the device should respond to the incoming message.
-// Made public for reuse in other packages.
-func ShouldRespond(self *types.VersionMessage, incoming *types.VersionMessage) bool {
+// shouldRespond determines if the device should respond to the incoming message (internal use).
+func shouldRespond(self *types.VersionMessage, incoming *types.VersionMessage) bool {
 	if incoming == nil || !incoming.Announce {
 		return false
 	}
@@ -492,9 +491,4 @@ func ShouldRespond(self *types.VersionMessage, incoming *types.VersionMessage) b
 		return false
 	}
 	return true
-}
-
-// shouldRespond determines if the device should respond to the incoming message (internal use).
-func shouldRespond(self *types.VersionMessage, incoming *types.VersionMessage) bool {
-	return ShouldRespond(self, incoming)
 }

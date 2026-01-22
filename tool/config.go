@@ -26,7 +26,7 @@ type AppConfig struct {
 
 func defaultConfig() AppConfig {
 	return AppConfig{
-		Alias:       "localsend-base-protocol-golang",
+		Alias:       "localsend-base-protocol-golang", // this may change it later:P
 		Version:     "2.0",
 		DeviceModel: "steamdeck",
 		DeviceType:  "headless",
