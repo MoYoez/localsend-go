@@ -83,6 +83,19 @@ func NewDefaultHandler() *Handler {
 			pinSetted := tool.GetProgramConfigStatus().Pin
 			switch {
 			case pinSetted != "" && pin == "":
+				notification := &notify.Notification{
+					Type:    "pin_required",
+					Title:   "PIN Required",
+					Message: fmt.Sprintf("PIN required for incoming files from %s", request.Info.Alias),
+					Data: map[string]any{
+						"from":      request.Info.Alias,
+						"fileCount": len(request.Files),
+					},
+				}
+				tool.DefaultLogger.Infof("[Notify] Sending pin_required notification: %v", notification)
+				if err := notify.SendNotification(notification, ""); err != nil {
+					tool.DefaultLogger.Errorf("[Notify] Failed to send pin_required notification: %v", err)
+				}
 				return nil, fmt.Errorf("PIN required")
 			case pinSetted != "" && pin != pinSetted:
 				return nil, fmt.Errorf("Invalid PIN")
