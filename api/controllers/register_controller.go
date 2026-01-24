@@ -36,6 +36,13 @@ func (ctrl *RegisterController) HandleRegister(c *gin.Context) {
 		return
 	}
 
+	// bypass fingerprint if the same.
+
+	if tool.CheckFingerPrintIsSame(incoming.Fingerprint) {
+		tool.DefaultLogger.Infof("Fingerprint is the same as the local device, bypass it.")
+		c.JSON(http.StatusForbidden, tool.FastReturnError("Fingerprint is the same as the local device, ban it."))
+		return
+	}
 	tool.DefaultLogger.Infof("[Register] Received register request from %s (fingerprint: %s)", incoming.Alias, incoming.Fingerprint)
 
 	remoteHost, _, splitErr := net.SplitHostPort(c.ClientIP())

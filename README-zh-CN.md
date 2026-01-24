@@ -12,7 +12,6 @@
 
 实际上这是为 [decky-localsend](https://github.com/moyoez/decky-localsend) 编写的工具
 
-
 ## 项目结构
 
 ```
@@ -27,6 +26,22 @@
 ├── tool/             # 辅助工具
 └── types/            # 类型定义
 ```
+
+### Flags
+
+| 参数                            | 类型    | 默认值   | 说明                                                                                         |
+|---------------------------------|---------|----------|----------------------------------------------------------------------------------------------|
+| `-log`                         | string   | (空)     | 日志模式：`dev` 或 `prod`                                                                    |
+| `-useMultcastAddress`          | string   | (空)     | 覆盖默认组播地址                                                                             |
+| `-useMultcastPort`             | int     | 0        | 覆盖默认组播端口                                                                             |
+| `-useConfigPath`               | string   | (空)     | 指定其他配置文件路径                                                                         |
+| `-useDefaultUploadFolder`      | string   | (空)     | 指定默认上传文件夹                                                                           |
+| `-useLegacyMode`               | Boolean   | false    | 使用旧版 HTTP 模式扫描设备（每 30 秒扫描一次）                                               |
+| `-useReferNetworkInterface`    | string   | "*"      | 指定使用的网络接口（如 `"en0"`、`"eth0"`，或 `"*"` 表示所有接口）                             |
+
+#### 小提示
+
+> 一般情况下，如果是通过热点给 Steam Deck 使用网络的话，使用 -useLegacyMode 会避免扫不到的问题 :(
 
 ## TODO
 

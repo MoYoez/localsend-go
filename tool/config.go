@@ -10,6 +10,7 @@ import (
 
 var (
 	DefaultConfigPath = "config.yaml"
+	CurrentConfig     AppConfig
 )
 
 type AppConfig struct {
@@ -59,6 +60,7 @@ func LoadConfig(path string) (AppConfig, error) {
 				return cfg, fmt.Errorf("config file not found, and failed to generate default config: %v", writeErr)
 			}
 			// hello, world!
+			CurrentConfig = cfg
 			return cfg, nil
 		}
 		return cfg, fmt.Errorf("failed to read config file: %v", err)
@@ -74,6 +76,7 @@ func LoadConfig(path string) (AppConfig, error) {
 		return cfg, fmt.Errorf("failed to parse config file: %v", err)
 	}
 
+	CurrentConfig = cfg
 	return cfg, nil
 }
 
@@ -83,4 +86,8 @@ func writeDefaultConfig(path string, cfg AppConfig) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0o644)
+}
+
+func GetCurrentConfig() *AppConfig {
+	return &CurrentConfig
 }

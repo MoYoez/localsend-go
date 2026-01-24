@@ -16,7 +16,6 @@ This implementation provides a Go-based server and client that follows the Local
 
 Actually it used for [decky-localsend](https://github.com/moyoez/decky-localsend)
 
-
 ### Project Structure
 
 ```
@@ -31,6 +30,20 @@ Actually it used for [decky-localsend](https://github.com/moyoez/decky-localsend
 ├── tool/             # Helper tools
 └── types/            # Type definitions
 ```
+
+### Command-Line Flags
+
+| Flag                          | Type    | Default | Description                                                                                  |
+|-------------------------------|---------|---------|----------------------------------------------------------------------------------------------|
+| `-log`                        | string  | (empty) | Log mode: `dev` or `prod`                                                                    |
+| `-useMultcastAddress`         | string  | (empty) | Override the default multicast address                                                       |
+| `-useMultcastPort`            | int     | 0       | Override the default multicast port                                                          |
+| `-useConfigPath`              | string  | (empty) | Specify an alternative config file path                                                      |
+| `-useDefaultUploadFolder`     | string  | (empty) | Specify the default folder for uploads                                                       |
+| `-useLegacyMode`              | bool    | false   | Use legacy HTTP mode to scan devices (scans every 30 seconds)                                |
+| `-useReferNetworkInterface`   | string  | "*"     | Specify the network interface for use (e.g., `"en0"`, `"eth0"`, or `"*"` for all interfaces) |
+
+> Generally, if you are using a hotspot for the Steam Deck, using -useLegacyMode can help avoid the issue of not being able to scan.
 
 ### TODO
 

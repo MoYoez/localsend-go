@@ -29,6 +29,7 @@ func main() {
 		api.DefaultUploadFolder = cfg.UseDefaultUploadFolder
 		api.SetDefaultUploadFolder(cfg.UseDefaultUploadFolder)
 	}
+
 	// initialize logger
 	tool.InitLogger()
 

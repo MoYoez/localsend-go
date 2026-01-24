@@ -2,6 +2,7 @@ package boardcast
 
 import (
 	"bytes"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/moyoez/localsend-base-protocol-golang/share"
 	"github.com/moyoez/localsend-base-protocol-golang/tool"
+
 	"github.com/moyoez/localsend-base-protocol-golang/types"
 )
 
@@ -74,12 +76,8 @@ func getNetworkInterfaces() ([]*net.Interface, error) {
 		var validInterfaces []*net.Interface
 		for i := range interfaces {
 			iface := &interfaces[i]
-			// skip closed interfaces and loopback interfaces
-			if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-				continue
-			}
-			// check if the interface supports multicast
-			if iface.Flags&net.FlagMulticast == 0 {
+			// remove tun connections.
+			if tool.RejectUnsupportNetworkInterface(iface) {
 				continue
 			}
 			validInterfaces = append(validInterfaces, iface)
@@ -105,10 +103,7 @@ func getNetworkInterfaces() ([]*net.Interface, error) {
 
 // listenOnInterface listens for multicast messages on a specific network interface.
 func listenOnInterface(iface *net.Interface, addr *net.UDPAddr, self *types.VersionMessage) {
-	interfaceName := "default"
-	if iface != nil {
-		interfaceName = iface.Name
-	}
+	interfaceName := iface.Name
 
 	c, err := net.ListenMulticastUDP("udp4", iface, addr)
 	if err != nil {
@@ -447,21 +442,60 @@ func ListenMulticastUsingHTTP(self *types.VersionMessage) {
 
 		tool.DefaultLogger.Debugf("ListenMulticastUsingHTTP: scanning %d IP addresses", len(targets))
 
+		// remove self ip here.
+
+		selfIPs := tool.GetLocalIPv4Set()
+
+		filtered := targets[:0]
+		for _, ip := range targets {
+			if _, isSelf := selfIPs[ip]; isSelf {
+				continue
+			}
+			filtered = append(filtered, ip)
+		}
+		targets = filtered
+
 		// Scan all targets concurrently
 		for _, ip := range targets {
 			go func(targetIP string) {
-				url := fmt.Sprintf("http://%s:%d/api/localsend/v2/register", targetIP, multcastPort)
+				// due to default set to localsend is https
+				protocol := "https"
+				url := fmt.Sprintf("%s://%s:%d/api/localsend/v2/register", protocol, targetIP, multcastPort)
 				req, err := http.NewRequest("POST", url, bytes.NewReader(payloadBytes))
 				if err != nil {
 					tool.DefaultLogger.Debugf("ListenMulticastUsingHTTP: failed to create request for %s: %v", url, err)
 					return
 				}
 				req.Header.Set("Content-Type", "application/json")
-				client := &http.Client{Timeout: tool.DefaultTimeout}
+				// solve tls: failed to verify certificate: x509: “LocalSend User” certificate is not standards compliant
+				client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{
+					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+				}}
 				resp, err := client.Do(req)
+
 				if err != nil {
-					// Silently ignore connection errors (most IPs won't have devices)
-					return
+					// tool.DefaultLogger.Debugf("ListenMulticastUsingHTTP: failed to send request to %s: %v", url, err)
+					//  check if is tls error, if is, try to use http protocol.
+					if strings.Contains(err.Error(), "EOF") {
+						tool.DefaultLogger.Warnf("Detected error, trying to use http protocol: %v", err.Error())
+						protocol = "http"
+						url = fmt.Sprintf("%s://%s:%d/api/localsend/v2/register", protocol, targetIP, multcastPort)
+						req, err = http.NewRequest("POST", url, bytes.NewReader(payloadBytes))
+						if err != nil {
+							tool.DefaultLogger.Debugf("ListenMulticastUsingHTTP: failed to create request for %s: %v", url, err)
+							return
+						}
+						req.Header.Set("Content-Type", "application/json")
+						client = tool.NewHTTPClient(protocol)
+						resp, err = client.Do(req)
+						if err != nil {
+							tool.DefaultLogger.Debugf("ListenMulticastUsingHTTP: failed to send request to %s: %v", url, err)
+							return
+						}
+					} else {
+						tool.DefaultLogger.Debugf("ListenMulticastUsingHTTP: failed to send request to %s: %v", url, err)
+						return
+					}
 				}
 				defer resp.Body.Close()
 				if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {

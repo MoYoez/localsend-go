@@ -101,7 +101,7 @@ func NewDefaultHandler() *Handler {
 				fileName = fileId
 			}
 			fileName = filepath.Base(fileName)
-			targetPath := filepath.Join(models.DefaultUploadFolder, sessionId, fmt.Sprintf("%s_%s", fileId, fileName))
+			targetPath := filepath.Join(models.DefaultUploadFolder, sessionId, fmt.Sprintf("%s", fileName))
 
 			file, err := os.Create(targetPath)
 			if err != nil {

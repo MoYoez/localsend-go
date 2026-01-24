@@ -22,7 +22,7 @@ func SetFlags() Config {
 	flag.StringVar(&cfg.UseConfigPath, "useConfigPath", "", "override config file path")
 	flag.StringVar(&cfg.UseDefaultUploadFolder, "useDefaultUploadFolder", "", "override default upload folder")
 	flag.BoolVar(&cfg.UseLegacyMode, "useLegacyMode", false, "use legacy HTTP mode to scan devices (scan every 30 seconds)")
-	flag.StringVar(&cfg.UseReferNetworkInterface, "useReferNetworkInterface", "", "specify network interface (e.g., 'en0', 'eth0') or '*' for all interfaces")
+	flag.StringVar(&cfg.UseReferNetworkInterface, "useReferNetworkInterface", "*", "specify network interface (e.g., 'en0', 'eth0') or '*' for all interfaces")
 	flag.Parse()
 	return cfg
 }
