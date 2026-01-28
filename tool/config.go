@@ -55,14 +55,14 @@ func DefaultProgramConfig() ProgramConfig {
 
 func defaultConfig() AppConfig {
 	return AppConfig{
-		Alias:       "localsend-base-protocol-golang", // this may change it later:P
-		Version:     "2.0",
-		DeviceModel: "steamdeck",
-		DeviceType:  "headless",
+		Alias:       NameGenerator(), // so I change it, use official name generator. :Ciallo~
+		Version:     "2.0",           // Protocol Version: maybe(
+		DeviceModel: "steamdeck",     // you can change it if you prefer.
+		DeviceType:  "headless",      // maybe you can change it, I promise it will not burn others machine:(
 		Fingerprint: generateFingerprint(),
-		Port:        53317,
-		Protocol:    "https",
-		Download:    false,
+		Port:        53317,   // default , in normal cases you dont need to change it.
+		Protocol:    "https", // ENCRYPTION is very important, I dont mind you to switch to http if you are in your home or safe network.
+		Download:    false,   // document said that  default is false, i dont know how to use it, so make it default.
 		Announce:    true,
 	}
 }
