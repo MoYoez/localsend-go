@@ -128,9 +128,13 @@ func SendUploadNotification(eventType, sessionId, fileId string, fileInfo map[st
 	// Check if this is plain text content
 	if fileInfo != nil {
 		if fileType, ok := fileInfo["fileType"].(string); ok {
-			notification.IsTextOnly = isPlainTextType(fileType)
+			isTxt := false
+			if fileName, ok := fileInfo["fileName"].(string); ok {
+				isTxt = strings.HasSuffix(strings.ToLower(fileName), ".txt")
+			}
+			notification.IsTextOnly = isPlainTextType(fileType) || isTxt
 			if notification.IsTextOnly {
-				tool.DefaultLogger.Infof("[Notify] Detected plain text content: fileType=%s", fileType)
+				tool.DefaultLogger.Infof("[Notify] Detected plain text content: fileType=%s fileName=%v", fileType, fileInfo["fileName"])
 			}
 		}
 	}
