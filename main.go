@@ -74,8 +74,8 @@ func main() {
 	}
 
 	handler := api.NewDefaultHandler()
-
-	apiServer := api.NewServer(appCfg.Port, appCfg.Protocol, handler)
+	// due to protocol request, need to 53317 by default
+	apiServer := api.NewServer(53317, appCfg.Protocol, handler)
 	go func() {
 		if err := apiServer.Start(); err != nil {
 			tool.DefaultLogger.Fatalf("API server startup failed: %v", err)
