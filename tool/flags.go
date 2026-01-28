@@ -16,6 +16,7 @@ type Config struct {
 	UseAlias                 string
 	UseMixedScan             bool // if true, use mixed scan mode, both UDP and HTTP.
 	SkipNotify               bool // if true, skip notify mode.
+	UseHttps                 bool // if true, use https protocol; if false, use http protocol. Alias for protocol config.
 }
 
 // SetFlags parses CLI flags and returns the override config.
@@ -33,6 +34,7 @@ func SetFlags() Config {
 	flag.StringVar(&cfg.UseAlias, "useAlias", "", "specify alias for the device")
 	flag.BoolVar(&cfg.UseMixedScan, "useMixedScan", false, "if true, use mixed scan mode, both UDP and HTTP.")
 	flag.BoolVar(&cfg.SkipNotify, "skipNotify", false, "if true, skip notify mode.")
+	flag.BoolVar(&cfg.UseHttps, "useHttps", true, "if true, use https (encrypted); if false, use http (unencrypted). Alias for protocol config.")
 	flag.Parse()
 	return cfg
 }

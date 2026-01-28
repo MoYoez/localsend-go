@@ -45,6 +45,7 @@ Actually it used for [decky-localsend](https://github.com/moyoez/decky-localsend
 | `-usePin`                    | string  | (empty) | Specify a PIN to require for uploads |
 | `-useAutoSave`               | bool    | true    | If false, requires manual confirmation to receive files |
 | `-useAlias`                    | string  | (empty) | Specify a Alias to shown in net. |
+| `-useHttps`                   | bool    | true    | If true, use https (encrypted); if false, use http (unencrypted). Alias for protocol config. |
 | `-useMixedScan`               | bool    | false   | Use mixed scan mode (both UDP and HTTP for discovery)                                        |
 | `-skipNotify`                 | bool    | false   | Skip notification mode                                                                       |
 
