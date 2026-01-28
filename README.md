@@ -49,14 +49,17 @@ Actually it used for [decky-localsend](https://github.com/moyoez/decky-localsend
 | `-skipNotify`                 | bool    | false   | Skip notification mode                                                                       |
 
 
-
-> Generally, if you are using a hotspot for the Steam Deck, using -useLegacyMode can help avoid the issue of not being able to scan.
+> Most of cases, mixed mode works well for most cases, if you prefer to reduce the power cost for your machine, switching to (Normal Mode - UDP Detected.) ,it will not make scan to the whole net.
 
 ### TODO
 
-1. **Manual confirmation as receiver** - Implement manual confirmation mechanism for receiving files
-2. **API parameter modifications** - Review and update API parameters as needed
-3. **Bug fixes and performance improvements** - Address potential bugs and optimize performance
+1. **Bug fixes and performance improvements** - Address potential bugs and optimize performance
+2. (maybe) Website Support, but decky-send make it, so i guess I dont make website for this, getting API for your local machine accessing it not a good choice.
+
+### Known BUGS
+
+- Cannot use web localsend (Due to localsend use v3 but not explained in protocol document.)
+- In some cases (e.g. localsend in backend too long time (I guess), being scanned machine cannot detected the service, restart service is helpful. )
 
 ### Getting Started
 
