@@ -11,5 +11,7 @@ func OnlyAllowLocal(c *gin.Context) {
 		c.Next()
 	} else {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden"})
+		c.Abort()
+		return
 	}
 }

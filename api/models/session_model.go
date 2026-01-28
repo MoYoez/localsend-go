@@ -15,6 +15,7 @@ var (
 	uploadSessions      = ttlworker.NewCache[string, map[string]types.FileInfo](tool.DefaultTTL)
 	uploadValidated     = ttlworker.NewCache[string, bool](tool.DefaultTTL)
 	confirmRecvChans    = ttlworker.NewCache[string, chan types.ConfirmResult](tool.DefaultTTL)
+	v1Sessions          = ttlworker.NewCache[string, string](tool.DefaultTTL)
 )
 
 func CacheUploadSession(sessionId string, files map[string]types.FileInfo) {
@@ -103,4 +104,25 @@ func GetUploadSessionFiles(sessionId string) (map[string]types.FileInfo, bool) {
 	copied := make(map[string]types.FileInfo, len(files))
 	maps.Copy(copied, files)
 	return copied, true
+}
+
+// StoreV1Session stores the IP -> sessionId mapping for V1 protocol
+func StoreV1Session(ip, sessionId string) {
+	uploadSessionMu.Lock()
+	defer uploadSessionMu.Unlock()
+	v1Sessions.Set(ip, sessionId)
+}
+
+// GetV1Session retrieves the sessionId for the given IP address (V1 protocol)
+func GetV1Session(ip string) string {
+	uploadSessionMu.RLock()
+	defer uploadSessionMu.RUnlock()
+	return v1Sessions.Get(ip)
+}
+
+// RemoveV1Session removes the IP -> sessionId mapping for V1 protocol
+func RemoveV1Session(ip string) {
+	uploadSessionMu.Lock()
+	defer uploadSessionMu.Unlock()
+	v1Sessions.Delete(ip)
 }

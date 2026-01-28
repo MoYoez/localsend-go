@@ -30,3 +30,9 @@ type VersionMessage struct {
 	Download    bool   `json:"download"`
 	Announce    bool   `json:"announce"`
 }
+
+type V1InfoResponse struct {
+	Alias       string `json:"alias"`
+	DeviceModel string `json:"deviceModel"`
+	DeviceType  string `json:"deviceType"`
+}

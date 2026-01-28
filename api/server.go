@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/charmbracelet/log"
 	"github.com/gin-gonic/gin"
 	"github.com/moyoez/localsend-base-protocol-golang/api/controllers"
 	"github.com/moyoez/localsend-base-protocol-golang/api/middlewares"
@@ -61,7 +62,11 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) setupRoutes() *gin.Engine {
-	gin.SetMode(gin.ReleaseMode)
+	if tool.DefaultLogger.GetLevel() == log.DebugLevel {
+		gin.SetMode(gin.DebugMode)
+	} else {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	engine := gin.New()
 	engine.Use(gin.Recovery())
 
@@ -77,6 +82,15 @@ func (s *Server) setupRoutes() *gin.Engine {
 		v2.POST("/prepare-upload", uploadCtrl.HandlePrepareUpload)
 		v2.POST("/upload", uploadCtrl.HandleUpload)
 		v2.POST("/cancel", cancelCtrl.HandleCancel)
+	}
+	// V1 Is Deprecated, but due to some reasons, I support to this ONLY ACCEPT REQUESTS.
+	v1 := engine.Group("/api/localsend/v1")
+	{
+		// no register, register use v2 pls.
+		v1.GET("/info", controllers.HandleLocalsendV1InfoGet)
+		v1.POST("/send-request", uploadCtrl.HandlePrepareV1Upload)
+		v1.POST("/send", uploadCtrl.HandleUploadV1Upload)
+		v1.POST("/cancel", cancelCtrl.HandleCancelV1Cancel)
 	}
 	self := engine.Group("/api/self/v1", middlewares.OnlyAllowLocal)
 	{
