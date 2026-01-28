@@ -282,7 +282,7 @@ func (ctrl *UploadController) HandleUpload(c *gin.Context) {
 
 	remoteAddr := c.ClientIP()
 	tool.DefaultLogger.Infof("[Upload] Received upload request: sessionId=%s, fileId=%s, token=%s, remoteAddr=%s", sessionId, fileId, token, remoteAddr)
-
+	tool.DefaultLogger.Infof("[Upload] Content-Type: %s", c.GetHeader("Content-Type"))
 	if ctrl.handler != nil {
 		tool.DefaultLogger.Infof("[Upload] Processing upload callback for fileId: %s", fileId)
 		if err := ctrl.handler.OnUpload(sessionId, fileId, token, c.Request.Body, remoteAddr); err != nil {

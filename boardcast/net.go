@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -31,6 +32,11 @@ var (
 	multcastPort          = defaultMultcastPort
 	referNetworkInterface string // the specified network interface name
 	listenAllInterfaces   bool   // whether to listen on all network interfaces
+
+	// networkIPsCache caches generated network IPs to avoid repeated generation
+	networkIPsCacheMu  sync.RWMutex
+	networkIPsCache    []string
+	networkIPsCacheKey string // stores interface addresses hash to detect changes
 )
 
 // SetMultcastAddress overrides the default multicast address if non-empty.
@@ -142,7 +148,18 @@ func listenOnInterface(iface *net.Interface, addr *net.UDPAddr, self *types.Vers
 			})
 			go func(remote types.VersionMessage, remoteAddr *net.UDPAddr) {
 				// Call the /register callback using HTTP/TCP to send the device information to the remote device.
-				if callbackErr := CallbackMulticastMessageUsingTCP(remoteAddr, self, &remote); callbackErr != nil {
+				// convert self to CallbackVersionMessageHTTP
+				selfHTTP := &types.CallbackVersionMessageHTTP{
+					Alias:       self.Alias,
+					Version:     self.Version,
+					DeviceModel: self.DeviceModel,
+					DeviceType:  self.DeviceType,
+					Fingerprint: self.Fingerprint,
+					Port:        self.Port,
+					Protocol:    self.Protocol,
+					Download:    self.Download,
+				}
+				if callbackErr := CallbackMulticastMessageUsingTCP(remoteAddr, selfHTTP, &remote); callbackErr != nil {
 					tool.DefaultLogger.Errorf("Failed to callback TCP register: %v\n", callbackErr)
 				}
 			}(incoming, udpAddr)
@@ -263,7 +280,7 @@ func SendMulticastOnce(message *types.VersionMessage) error {
 }
 
 // CallbackMulticastMessageUsingTCP calls the /register callback using HTTP/TCP.
-func CallbackMulticastMessageUsingTCP(targetAddr *net.UDPAddr, self *types.VersionMessage, remote *types.VersionMessage) error {
+func CallbackMulticastMessageUsingTCP(targetAddr *net.UDPAddr, self *types.CallbackVersionMessageHTTP, remote *types.VersionMessage) error {
 	if err := validateCallbackParams(targetAddr, self, remote); err != nil {
 		return err
 	}
@@ -283,11 +300,21 @@ func CallbackMulticastMessageUsingTCP(targetAddr *net.UDPAddr, self *types.Versi
 	}
 	// Try sending register request via HTTP
 	if sendErr := sendRegisterRequest(tool.BytesToString(url), remote.Protocol, tool.BytesToString(payload)); sendErr != nil {
+		// debug what msg sent
 		tool.DefaultLogger.Warnf("Failed to send register request via HTTP: %v. Falling back to UDP multicast.", sendErr)
 		// Fallback: Respond using UDP multicast (announce=false)
 		response := *self
-		response.Announce = false
-		if udpErr := CallbackMulticastMessageUsingUDP(&response); udpErr != nil {
+		//	https://github.com/localsend/protocol/blob/main/README.md#31-multicast-udp-default
+		if udpErr := CallbackMulticastMessageUsingUDP(&types.VersionMessage{
+			Alias:       response.Alias,
+			Version:     response.Version,
+			DeviceModel: response.DeviceModel,
+			DeviceType:  response.DeviceType,
+			Fingerprint: response.Fingerprint,
+			Port:        response.Port,
+			Protocol:    response.Protocol,
+			Announce:    false,
+		}); udpErr != nil {
 			return fmt.Errorf("both HTTP and UDP multicast fallback failed: %v; original: %v", udpErr, sendErr)
 		}
 	}
@@ -397,10 +424,64 @@ func generateNetworkIPs(ipnet *net.IPNet) []string {
 	return ips
 }
 
+// getCachedNetworkIPs returns cached network IPs or generates new ones if cache is invalid.
+// It detects network interface changes by comparing the current interface addresses hash.
+func getCachedNetworkIPs() ([]string, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil, err
+	}
+
+	// Build a cache key based on current interface addresses
+	var keyBuilder strings.Builder
+	for _, addr := range addrs {
+		ipnet, ok := addr.(*net.IPNet)
+		if !ok || ipnet.IP.IsLoopback() || ipnet.IP.To4() == nil {
+			continue
+		}
+		keyBuilder.WriteString(ipnet.String())
+		keyBuilder.WriteString(";")
+	}
+	currentKey := keyBuilder.String()
+
+	// Check if cache is valid
+	networkIPsCacheMu.RLock()
+	if networkIPsCacheKey == currentKey && len(networkIPsCache) > 0 {
+		// Cache hit: return a copy to avoid race conditions
+		result := make([]string, len(networkIPsCache))
+		copy(result, networkIPsCache)
+		networkIPsCacheMu.RUnlock()
+		return result, nil
+	}
+	networkIPsCacheMu.RUnlock()
+
+	// Cache miss: generate new IPs
+	var targets []string
+	for _, addr := range addrs {
+		ipnet, ok := addr.(*net.IPNet)
+		if !ok || ipnet.IP.IsLoopback() || ipnet.IP.To4() == nil {
+			continue
+		}
+		networkIPs := generateNetworkIPs(ipnet)
+		targets = append(targets, networkIPs...)
+	}
+
+	// Update cache
+	networkIPsCacheMu.Lock()
+	networkIPsCache = targets
+	networkIPsCacheKey = currentKey
+	networkIPsCacheMu.Unlock()
+
+	// Return a copy
+	result := make([]string, len(targets))
+	copy(result, targets)
+	return result, nil
+}
+
 // Legacy: HTTP-only fallback for devices that don't support UDP multicast.
 // If multicast fails, send an HTTP POST to /api/localsend/v2/register on all local IPs to discover devices.
 // This function runs in a loop, scanning every 30 seconds.
-func ListenMulticastUsingHTTP(self *types.VersionMessage) {
+func ListenMulticastUsingHTTP(self *types.VersionMessageHTTP) {
 	if self == nil {
 		tool.DefaultLogger.Warn("ListenMulticastUsingHTTP: self is nil")
 		return
@@ -420,21 +501,10 @@ func ListenMulticastUsingHTTP(self *types.VersionMessage) {
 
 	// Perform initial scan immediately
 	scanOnce := func() {
-		addrs, err := net.InterfaceAddrs()
+		targets, err := getCachedNetworkIPs()
 		if err != nil {
-			tool.DefaultLogger.Warnf("ListenMulticastUsingHTTP: failed to enumerate interface addresses: %v", err)
+			tool.DefaultLogger.Warnf("ListenMulticastUsingHTTP: failed to get network IPs: %v", err)
 			return
-		}
-
-		var targets []string
-		for _, addr := range addrs {
-			ipnet, ok := addr.(*net.IPNet)
-			if !ok || ipnet.IP.IsLoopback() || ipnet.IP.To4() == nil {
-				continue
-			}
-			// Generate all IPs in the network
-			networkIPs := generateNetworkIPs(ipnet)
-			targets = append(targets, networkIPs...)
 		}
 		if len(targets) == 0 {
 			tool.DefaultLogger.Warn("ListenMulticastUsingHTTP: no usable local IPv4 addresses found")
@@ -473,13 +543,14 @@ func ListenMulticastUsingHTTP(self *types.VersionMessage) {
 					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 				}}
 				resp, err := client.Do(req)
-
+				var GlobalProtocol = "https"
 				if err != nil {
 					// tool.DefaultLogger.Debugf("ListenMulticastUsingHTTP: failed to send request to %s: %v", url, err)
 					//  check if is tls error, if is, try to use http protocol.
 					if strings.Contains(err.Error(), "EOF") {
 						tool.DefaultLogger.Warnf("Detected error, trying to use http protocol: %v", err.Error())
 						protocol = "http"
+						GlobalProtocol = "http"
 						url = fmt.Sprintf("%s://%s:%d/api/localsend/v2/register", protocol, targetIP, multcastPort)
 						req, err = http.NewRequest("POST", url, bytes.NewReader(payloadBytes))
 						if err != nil {
@@ -505,7 +576,7 @@ func ListenMulticastUsingHTTP(self *types.VersionMessage) {
 				}
 
 				// Parse response body
-				var remote types.VersionMessage
+				var remote types.CallbackLegacyVersionMessageHTTP
 				body, err := io.ReadAll(resp.Body)
 				if err != nil {
 					tool.DefaultLogger.Debugf("ListenMulticastUsingHTTP: failed reading response from %s: %v", url, err)
@@ -519,8 +590,18 @@ func ListenMulticastUsingHTTP(self *types.VersionMessage) {
 				// Store the discovered device
 				if remote.Fingerprint != "" {
 					share.SetUserScanCurrent(remote.Fingerprint, share.UserScanCurrentItem{
-						Ipaddress:      ip,
-						VersionMessage: remote,
+						Ipaddress: ip,
+						VersionMessage: types.VersionMessage{
+							Alias:       remote.Alias,
+							Version:     remote.Version,
+							DeviceModel: remote.DeviceModel,
+							DeviceType:  remote.DeviceType,
+							Fingerprint: remote.Fingerprint,
+							Port:        defaultMultcastPort,
+							Protocol:    GlobalProtocol,
+							Download:    remote.Download,
+							Announce:    true,
+						},
 					})
 				}
 			}(ip)
@@ -543,6 +624,9 @@ func sendRegisterRequest(url string, protocol string, payload string) error {
 		return fmt.Errorf("failed to create register request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	tool.DefaultLogger.Debugf("Sent: %s", url)
+	tool.DefaultLogger.Debugf("Payload: %s", payload)
+	tool.DefaultLogger.Debugf("Protocol: %s", protocol)
 
 	client := tool.NewHTTPClient(protocol)
 	resp, err := client.Do(req)
@@ -558,7 +642,7 @@ func sendRegisterRequest(url string, protocol string, payload string) error {
 
 // ValidateCallbackParams validates the callback parameters.
 // Made public for reuse in other packages.
-func ValidateCallbackParams(targetAddr *net.UDPAddr, self *types.VersionMessage, remote *types.VersionMessage) error {
+func ValidateCallbackParams(targetAddr *net.UDPAddr, self *types.CallbackVersionMessageHTTP, remote *types.VersionMessage) error {
 	if targetAddr == nil || self == nil || remote == nil {
 		return fmt.Errorf("invalid callback params")
 	}
@@ -566,7 +650,7 @@ func ValidateCallbackParams(targetAddr *net.UDPAddr, self *types.VersionMessage,
 }
 
 // validateCallbackParams validates the callback parameters (internal use).
-func validateCallbackParams(targetAddr *net.UDPAddr, self *types.VersionMessage, remote *types.VersionMessage) error {
+func validateCallbackParams(targetAddr *net.UDPAddr, self *types.CallbackVersionMessageHTTP, remote *types.VersionMessage) error {
 	return ValidateCallbackParams(targetAddr, self, remote)
 }
 

@@ -32,9 +32,6 @@ func main() {
 	if cfg.UseAlias != "" {
 		appCfg.Alias = cfg.UseAlias
 	}
-	if cfg.UseMixedScan {
-		boardcast.SetMixedScan(cfg.UseMixedScan)
-	}
 
 	tool.SetProgramConfigStatus(cfg.UsePin, cfg.UseAutoSave)
 
@@ -50,7 +47,7 @@ func main() {
 		Port:        appCfg.Port,
 		Protocol:    appCfg.Protocol,
 		Download:    appCfg.Download,
-		Announce:    appCfg.Announce,
+		Announce:    true,
 	}
 	api.SetSelfDevice(message)
 	if cfg.Log == "" {
@@ -79,12 +76,30 @@ func main() {
 	switch {
 	case cfg.UseLegacyMode:
 		tool.DefaultLogger.Info("Using Legacy Mode: HTTP scanning (scanning every 30 seconds)")
-		go boardcast.ListenMulticastUsingHTTP(message)
+		go boardcast.ListenMulticastUsingHTTP(&types.VersionMessageHTTP{
+			Alias:       appCfg.Alias,
+			Version:     appCfg.Version,
+			DeviceModel: appCfg.DeviceModel,
+			DeviceType:  appCfg.DeviceType,
+			Fingerprint: appCfg.Fingerprint,
+			Port:        appCfg.Port,
+			Protocol:    appCfg.Protocol,
+			Download:    appCfg.Download,
+		})
 	case cfg.UseMixedScan:
 		tool.DefaultLogger.Info("Using Mixed Scan Mode: UDP and HTTP scanning")
 		go boardcast.ListenMulticastUsingUDP(message)
-		go boardcast.ListenMulticastUsingHTTP(message)
 		go boardcast.SendMulticastUsingUDP(message)
+		go boardcast.ListenMulticastUsingHTTP(&types.VersionMessageHTTP{
+			Alias:       appCfg.Alias,
+			Version:     appCfg.Version,
+			DeviceModel: appCfg.DeviceModel,
+			DeviceType:  appCfg.DeviceType,
+			Fingerprint: appCfg.Fingerprint,
+			Port:        appCfg.Port,
+			Protocol:    appCfg.Protocol,
+			Download:    appCfg.Download,
+		})
 	default:
 		tool.DefaultLogger.Info("Using UDP multicast mode")
 		go boardcast.ListenMulticastUsingUDP(message)

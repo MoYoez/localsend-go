@@ -31,6 +31,37 @@ type VersionMessage struct {
 	Announce    bool   `json:"announce"`
 }
 
+type VersionMessageHTTP struct {
+	Alias       string `json:"alias"`
+	Version     string `json:"version"`
+	DeviceModel string `json:"deviceModel"`
+	DeviceType  string `json:"deviceType"`
+	Fingerprint string `json:"fingerprint"`
+	Port        int    `json:"port"`
+	Protocol    string `json:"protocol"`
+	Download    bool   `json:"download"`
+}
+
+type CallbackVersionMessageHTTP struct {
+	Alias       string `json:"alias"`
+	Version     string `json:"version"`
+	DeviceModel string `json:"deviceModel"`
+	DeviceType  string `json:"deviceType"`
+	Fingerprint string `json:"fingerprint"`
+	Port        int    `json:"port"`
+	Protocol    string `json:"protocol"`
+	Download    bool   `json:"download"`
+}
+
+type CallbackLegacyVersionMessageHTTP struct {
+	Alias       string `json:"alias"`
+	Version     string `json:"version"`
+	DeviceModel string `json:"deviceModel"`
+	DeviceType  string `json:"deviceType"`
+	Fingerprint string `json:"fingerprint"`
+	Download    bool   `json:"download"`
+}
+
 type V1InfoResponse struct {
 	Alias       string `json:"alias"`
 	DeviceModel string `json:"deviceModel"`
