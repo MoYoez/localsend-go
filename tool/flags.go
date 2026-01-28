@@ -14,6 +14,7 @@ type Config struct {
 	UsePin                   string
 	UseAutoSave              bool // if false, user require to confirm before recv.
 	UseAlias                 string
+	UseMixedScan             bool // if true, use mixed scan mode, both UDP and HTTP.
 }
 
 // SetFlags parses CLI flags and returns the override config.
@@ -29,7 +30,7 @@ func SetFlags() Config {
 	flag.StringVar(&cfg.UsePin, "usePin", "", "specify pin for upload (only for FROM upload request)")
 	flag.BoolVar(&cfg.UseAutoSave, "useAutoSave", true, "if false, user require to confirm before recv (only for FROM upload request)")
 	flag.StringVar(&cfg.UseAlias, "useAlias", "", "specify alias for the device")
-
+	flag.BoolVar(&cfg.UseMixedScan, "useMixedScan", false, "if true, use mixed scan mode, both UDP and HTTP.")
 	flag.Parse()
 	return cfg
 }

@@ -32,6 +32,9 @@ func main() {
 	if cfg.UseAlias != "" {
 		appCfg.Alias = cfg.UseAlias
 	}
+	if cfg.UseMixedScan {
+		boardcast.SetMixedScan(cfg.UseMixedScan)
+	}
 
 	tool.SetProgramConfigStatus(cfg.UsePin, cfg.UseAutoSave)
 
@@ -73,10 +76,16 @@ func main() {
 		}
 	}()
 
-	if cfg.UseLegacyMode {
+	switch {
+	case cfg.UseLegacyMode:
 		tool.DefaultLogger.Info("Using Legacy Mode: HTTP scanning (scanning every 30 seconds)")
 		go boardcast.ListenMulticastUsingHTTP(message)
-	} else {
+	case cfg.UseMixedScan:
+		tool.DefaultLogger.Info("Using Mixed Scan Mode: UDP and HTTP scanning")
+		go boardcast.ListenMulticastUsingUDP(message)
+		go boardcast.ListenMulticastUsingHTTP(message)
+		go boardcast.SendMulticastUsingUDP(message)
+	default:
 		tool.DefaultLogger.Info("Using UDP multicast mode")
 		go boardcast.ListenMulticastUsingUDP(message)
 		go boardcast.SendMulticastUsingUDP(message)

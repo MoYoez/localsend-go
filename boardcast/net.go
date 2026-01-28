@@ -23,6 +23,7 @@ import (
 const (
 	defaultMultcastAddress = "224.0.0.167"
 	defaultMultcastPort    = 53317 // UDP & HTTP
+
 )
 
 var (
@@ -493,7 +494,7 @@ func ListenMulticastUsingHTTP(self *types.VersionMessage) {
 							return
 						}
 					} else {
-						tool.DefaultLogger.Debugf("ListenMulticastUsingHTTP: failed to send request to %s: %v", url, err)
+						// tool.DefaultLogger.Debugf("ListenMulticastUsingHTTP: failed to send request to %s: %v", url, err)
 						return
 					}
 				}
