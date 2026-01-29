@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -24,7 +25,12 @@ import (
 const (
 	defaultMultcastAddress = "224.0.0.167"
 	defaultMultcastPort    = 53317 // UDP & HTTP
-
+	// httpScanConcurrencyLimit limits the number of concurrent HTTP scan goroutines
+	httpScanConcurrencyLimit = 25
+	// tcpProbeTimeout is the timeout for TCP port probe
+	tcpProbeTimeout = 500 * time.Millisecond
+	// httpScanTimeout is the timeout for HTTP requests during scanning
+	httpScanTimeout = 2 * time.Second
 )
 
 var (
@@ -478,9 +484,22 @@ func getCachedNetworkIPs() ([]string, error) {
 	return result, nil
 }
 
+// quickTCPProbe checks if a port is open using a fast TCP connection attempt.
+// Returns true if the port is open, false otherwise.
+func quickTCPProbe(ip string, port int) bool {
+	addr := net.JoinHostPort(ip, strconv.Itoa(port))
+	conn, err := net.DialTimeout("tcp", addr, tcpProbeTimeout)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
+}
+
 // Legacy: HTTP-only fallback for devices that don't support UDP multicast.
 // If multicast fails, send an HTTP POST to /api/localsend/v2/register on all local IPs to discover devices.
 // This function runs in a loop, scanning every 30 seconds.
+// Optimized with: TCP quick probe, concurrency limit, and shorter timeouts.
 func ListenMulticastUsingHTTP(self *types.VersionMessageHTTP) {
 	if self == nil {
 		tool.DefaultLogger.Warn("ListenMulticastUsingHTTP: self is nil")
@@ -493,6 +512,21 @@ func ListenMulticastUsingHTTP(self *types.VersionMessageHTTP) {
 	if err != nil {
 		tool.DefaultLogger.Warnf("ListenMulticastUsingHTTP: failed to marshal self message: %v", err)
 		return
+	}
+
+	// Scan all targets concurrently
+	// set one client, do not use twice :(
+	// solve tls: failed to verify certificate: x509: “LocalSend User” certificate is not standards compliant
+	// Create a reusable HTTP client with optimized settings
+	httpClient := &http.Client{
+		Timeout: httpScanTimeout,
+		Transport: &http.Transport{
+			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+			MaxIdleConns:        50,
+			MaxIdleConnsPerHost: 5,
+			IdleConnTimeout:     30 * time.Second,
+			DisableKeepAlives:   false,
+		},
 	}
 
 	// Scan loop: every 30 seconds
@@ -526,15 +560,25 @@ func ListenMulticastUsingHTTP(self *types.VersionMessageHTTP) {
 		}
 		targets = filtered
 
-		// Scan all targets concurrently
-		// set one client, do not use twice :(
-		// solve tls: failed to verify certificate: x509: “LocalSend User” certificate is not standards compliant
-		client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}}
+		// Use semaphore to limit concurrency
+		sem := make(chan struct{}, httpScanConcurrencyLimit)
+		var wg sync.WaitGroup
+
 		for _, ip := range targets {
+			wg.Add(1)
 			go func(targetIP string) {
-				// due to default set to localsend is https
+				defer wg.Done()
+
+				// Acquire semaphore
+				sem <- struct{}{}
+				defer func() { <-sem }()
+
+				// Quick TCP probe first - skip if port is not open
+				if !quickTCPProbe(targetIP, multcastPort) {
+					return
+				}
+
+				// Port is open, proceed with HTTP request
 				protocol := "https"
 				url := fmt.Sprintf("%s://%s:%d/api/localsend/v2/register", protocol, targetIP, multcastPort)
 				req, err := http.NewRequest("POST", url, bytes.NewReader(payloadBytes))
@@ -544,15 +588,15 @@ func ListenMulticastUsingHTTP(self *types.VersionMessageHTTP) {
 				}
 				req.Header.Set("Content-Type", "application/json")
 
-				resp, err := client.Do(req)
-				var GlobalProtocol = "https"
+				resp, err := httpClient.Do(req)
+				globalProtocol := "https"
 				if err != nil {
 					// tool.DefaultLogger.Debugf("ListenMulticastUsingHTTP: failed to send request to %s: %v", url, err)
 					//  check if is tls error, if is, try to use http protocol.
 					if strings.Contains(err.Error(), "EOF") {
 						tool.DefaultLogger.Warnf("Detected error, trying to use http protocol: %v", err.Error())
 						protocol = "http"
-						GlobalProtocol = "http"
+						globalProtocol = "http"
 						url = fmt.Sprintf("%s://%s:%d/api/localsend/v2/register", protocol, targetIP, multcastPort)
 						req, err = http.NewRequest("POST", url, bytes.NewReader(payloadBytes))
 						if err != nil {
@@ -561,7 +605,7 @@ func ListenMulticastUsingHTTP(self *types.VersionMessageHTTP) {
 						}
 						req.Header.Set("Content-Type", "application/json")
 
-						resp, err = client.Do(req)
+						resp, err = httpClient.Do(req)
 						if err != nil {
 							tool.DefaultLogger.Debugf("ListenMulticastUsingHTTP: failed to send request to %s: %v", url, err)
 							return
@@ -592,7 +636,7 @@ func ListenMulticastUsingHTTP(self *types.VersionMessageHTTP) {
 				// Store the discovered device
 				if remote.Fingerprint != "" {
 					share.SetUserScanCurrent(remote.Fingerprint, share.UserScanCurrentItem{
-						Ipaddress: ip,
+						Ipaddress: targetIP,
 						VersionMessage: types.VersionMessage{
 							Alias:       remote.Alias,
 							Version:     remote.Version,
@@ -600,7 +644,7 @@ func ListenMulticastUsingHTTP(self *types.VersionMessageHTTP) {
 							DeviceType:  remote.DeviceType,
 							Fingerprint: remote.Fingerprint,
 							Port:        defaultMultcastPort,
-							Protocol:    GlobalProtocol,
+							Protocol:    globalProtocol,
 							Download:    remote.Download,
 							Announce:    true,
 						},
@@ -608,6 +652,9 @@ func ListenMulticastUsingHTTP(self *types.VersionMessageHTTP) {
 				}
 			}(ip)
 		}
+
+		// Wait for all scans to complete
+		wg.Wait()
 	}
 
 	// Initial scan
