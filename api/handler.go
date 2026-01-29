@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -26,6 +27,45 @@ type Handler struct {
 
 // Ensure Handler implements types.HandlerInterface
 var _ types.HandlerInterface = (*Handler)(nil)
+
+// copyWithContext copies from src to dst while respecting context cancellation.
+// It checks the context periodically during the copy operation.
+func copyWithContext(ctx context.Context, dst io.Writer, src io.Reader) (int64, error) {
+	buf := make([]byte, 32*1024) // 32KB buffer
+	var written int64
+	for {
+		// Check if context is cancelled before each read
+		select {
+		case <-ctx.Done():
+			return written, ctx.Err()
+		default:
+		}
+
+		nr, readErr := src.Read(buf)
+		if nr > 0 {
+			nw, writeErr := dst.Write(buf[0:nr])
+			if nw < 0 || nr < nw {
+				nw = 0
+				if writeErr == nil {
+					writeErr = fmt.Errorf("invalid write result")
+				}
+			}
+			written += int64(nw)
+			if writeErr != nil {
+				return written, writeErr
+			}
+			if nr != nw {
+				return written, io.ErrShortWrite
+			}
+		}
+		if readErr != nil {
+			if readErr == io.EOF {
+				return written, nil
+			}
+			return written, readErr
+		}
+	}
+}
 
 // OnRegister implements types.HandlerInterface
 func (h *Handler) OnRegister(remote *types.VersionMessage) error {
@@ -146,6 +186,9 @@ func NewDefaultHandler() *Handler {
 				return nil, err
 			}
 
+			// Create session context for cancellation support
+			models.CreateSessionContext(askSession)
+
 			for fileID := range request.Files {
 				response.Files[fileID] = "accepted"
 			}
@@ -155,6 +198,18 @@ func NewDefaultHandler() *Handler {
 			return response, nil
 		},
 		onUpload: func(sessionId, fileId, token string, data io.Reader, remoteAddr string) error {
+			// Check if session is cancelled before starting
+			if models.IsSessionCancelled(sessionId) {
+				return fmt.Errorf("session cancelled")
+			}
+
+			// Get session context for cancellation support
+			ctx := models.GetSessionContext(sessionId)
+			if ctx == nil {
+				// Fallback: create a background context if session context not found
+				ctx = context.Background()
+			}
+
 			info, ok := models.LookupFileInfo(sessionId, fileId)
 			if !ok {
 				return fmt.Errorf("file metadata not found")
@@ -179,9 +234,25 @@ func NewDefaultHandler() *Handler {
 
 			hasher := sha256.New()
 			writer := io.MultiWriter(file, hasher)
-			written, err := io.Copy(writer, data)
+
+			// Use context-aware copy to support cancellation
+			written, err := copyWithContext(ctx, writer, data)
 			if err != nil {
+				// Check if it was cancelled
+				if ctx.Err() != nil {
+					// Clean up the partial file
+					file.Close()
+					os.Remove(targetPath)
+					return fmt.Errorf("upload cancelled")
+				}
 				return fmt.Errorf("write file failed: %w", err)
+			}
+
+			// Check if cancelled after copy
+			if ctx.Err() != nil {
+				file.Close()
+				os.Remove(targetPath)
+				return fmt.Errorf("upload cancelled")
 			}
 
 			if info.Size > 0 && written != info.Size {
@@ -203,8 +274,11 @@ func NewDefaultHandler() *Handler {
 			if !tool.QuerySessionIsValid(sessionId) {
 				return fmt.Errorf("session %s not found", sessionId)
 			}
+			// This will cancel the session context, interrupting any ongoing uploads
 			models.RemoveUploadSession(sessionId)
-			tool.DefaultLogger.Infof("Session %s canceled", sessionId)
+			// Also destroy the session from the tool cache
+			tool.DestorySession(sessionId)
+			tool.DefaultLogger.Infof("Session %s canceled and all ongoing uploads interrupted", sessionId)
 			return nil
 		},
 	}

@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"maps"
 	"sync"
 
@@ -9,6 +10,12 @@ import (
 	"github.com/moyoez/localsend-base-protocol-golang/types"
 )
 
+// SessionContext holds the context and cancel function for a session
+type SessionContext struct {
+	Ctx    context.Context
+	Cancel context.CancelFunc
+}
+
 var (
 	uploadSessionMu     sync.RWMutex
 	DefaultUploadFolder = "uploads"
@@ -16,6 +23,8 @@ var (
 	uploadValidated     = ttlworker.NewCache[string, bool](tool.DefaultTTL)
 	confirmRecvChans    = ttlworker.NewCache[string, chan types.ConfirmResult](tool.DefaultTTL)
 	v1Sessions          = ttlworker.NewCache[string, string](tool.DefaultTTL)
+	// sessionContexts stores the context for each session to support cancellation
+	sessionContexts = ttlworker.NewCache[string, *SessionContext](tool.DefaultTTL)
 )
 
 func CacheUploadSession(sessionId string, files map[string]types.FileInfo) {
@@ -58,6 +67,11 @@ func RemoveUploadSession(sessionId string) {
 	uploadSessions.Delete(sessionId)
 	uploadValidated.Delete(sessionId)
 	confirmRecvChans.Delete(sessionId)
+	// Cancel the session context to interrupt ongoing uploads
+	if sessCtx := sessionContexts.Get(sessionId); sessCtx != nil {
+		sessCtx.Cancel()
+		sessionContexts.Delete(sessionId)
+	}
 }
 
 func IsSessionValidated(sessionId string) bool {
@@ -125,4 +139,41 @@ func RemoveV1Session(ip string) {
 	uploadSessionMu.Lock()
 	defer uploadSessionMu.Unlock()
 	v1Sessions.Delete(ip)
+}
+
+// CreateSessionContext creates a new context for the session and returns it
+func CreateSessionContext(sessionId string) context.Context {
+	uploadSessionMu.Lock()
+	defer uploadSessionMu.Unlock()
+	ctx, cancel := context.WithCancel(context.Background())
+	sessionContexts.Set(sessionId, &SessionContext{
+		Ctx:    ctx,
+		Cancel: cancel,
+	})
+	return ctx
+}
+
+// GetSessionContext returns the context for the session, or nil if not found
+func GetSessionContext(sessionId string) context.Context {
+	uploadSessionMu.RLock()
+	defer uploadSessionMu.RUnlock()
+	sessCtx := sessionContexts.Get(sessionId)
+	if sessCtx == nil {
+		return nil
+	}
+	return sessCtx.Ctx
+}
+
+// IsSessionCancelled checks if the session has been cancelled
+func IsSessionCancelled(sessionId string) bool {
+	ctx := GetSessionContext(sessionId)
+	if ctx == nil {
+		return true // Session not found, treat as cancelled
+	}
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
 }

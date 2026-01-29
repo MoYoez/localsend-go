@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	ttlworker "github.com/FloatTech/ttl"
@@ -76,11 +78,67 @@ type UserUploadSession struct {
 	Tokens    map[string]string         // File ID to token mapping
 }
 
+// UserUploadSessionContext holds the context and cancel function for a user upload session
+type UserUploadSessionContext struct {
+	Ctx    context.Context
+	Cancel context.CancelFunc
+}
+
 // UserUploadSessions stores user upload sessions using TTL cache (default 30 minutes expiration)
 var (
-	UserUploadSessionTTL = 60 * time.Minute
-	UserUploadSessions   = ttlworker.NewCache[string, UserUploadSession](UserUploadSessionTTL)
+	UserUploadSessionTTL      = 60 * time.Minute
+	UserUploadSessions        = ttlworker.NewCache[string, UserUploadSession](UserUploadSessionTTL)
+	userUploadSessionContexts = ttlworker.NewCache[string, *UserUploadSessionContext](UserUploadSessionTTL)
+	userUploadSessionMu       sync.RWMutex
 )
+
+// CreateUserUploadSessionContext creates a new context for the user upload session
+func CreateUserUploadSessionContext(sessionId string) context.Context {
+	userUploadSessionMu.Lock()
+	defer userUploadSessionMu.Unlock()
+	ctx, cancel := context.WithCancel(context.Background())
+	userUploadSessionContexts.Set(sessionId, &UserUploadSessionContext{
+		Ctx:    ctx,
+		Cancel: cancel,
+	})
+	return ctx
+}
+
+// GetUserUploadSessionContext returns the context for the user upload session
+func GetUserUploadSessionContext(sessionId string) context.Context {
+	userUploadSessionMu.RLock()
+	defer userUploadSessionMu.RUnlock()
+	sessCtx := userUploadSessionContexts.Get(sessionId)
+	if sessCtx == nil {
+		return nil
+	}
+	return sessCtx.Ctx
+}
+
+// CancelUserUploadSession cancels the user upload session and removes it
+func CancelUserUploadSession(sessionId string) {
+	userUploadSessionMu.Lock()
+	defer userUploadSessionMu.Unlock()
+	if sessCtx := userUploadSessionContexts.Get(sessionId); sessCtx != nil {
+		sessCtx.Cancel()
+		userUploadSessionContexts.Delete(sessionId)
+	}
+	UserUploadSessions.Delete(sessionId)
+}
+
+// IsUserUploadSessionCancelled checks if the user upload session has been cancelled
+func IsUserUploadSessionCancelled(sessionId string) bool {
+	ctx := GetUserUploadSessionContext(sessionId)
+	if ctx == nil {
+		return true
+	}
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
 
 // UserGetNetworkInfo returns local network interface information with IP addresses and segment numbers.
 // GET /api/self/v1/get-network-info
@@ -249,6 +307,9 @@ func UserPrepareUpload(c *gin.Context) {
 	// Store using sessionId as key
 	UserUploadSessions.Set(prepareResponse.SessionId, sessionInfo)
 
+	// Create session context for cancellation support
+	CreateUserUploadSessionContext(prepareResponse.SessionId)
+
 	// Return result
 	c.JSON(http.StatusOK, tool.FastReturnSuccessWithData(types.PrepareUploadResponse{
 		SessionId: prepareResponse.SessionId,
@@ -347,6 +408,12 @@ func UserUpload(c *gin.Context) {
 		return
 	}
 
+	// Check if session is cancelled
+	if IsUserUploadSessionCancelled(sessionId) {
+		c.JSON(http.StatusConflict, tool.FastReturnError("Upload session cancelled"))
+		return
+	}
+
 	// Get user upload session information
 	sessionInfo := UserUploadSessions.Get(sessionId)
 	if sessionInfo.SessionId == "" {
@@ -361,6 +428,12 @@ func UserUpload(c *gin.Context) {
 		return
 	}
 
+	// Get session context for cancellation support
+	ctx := GetUserUploadSessionContext(sessionId)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	// Create reader from file data
 	fileReader = bytes.NewReader(fileData)
 
@@ -373,7 +446,8 @@ func UserUpload(c *gin.Context) {
 	tool.DefaultLogger.Infof("Uploading file to %s:%d (sessionId=%s, fileId=%s)",
 		targetAddr.IP.String(), targetAddr.Port, sessionId, fileId)
 
-	err := transfer.UploadFile(
+	err := transfer.UploadFileWithContext(
+		ctx,
 		targetAddr,
 		&sessionInfo.Target.VersionMessage,
 		sessionId,
@@ -383,6 +457,12 @@ func UserUpload(c *gin.Context) {
 	)
 
 	if err != nil {
+		// Check if it was cancelled
+		if ctx.Err() != nil {
+			tool.DefaultLogger.Infof("File upload cancelled (sessionId=%s, fileId=%s)", sessionId, fileId)
+			c.JSON(http.StatusConflict, tool.FastReturnError("Upload cancelled"))
+			return
+		}
 		tool.DefaultLogger.Errorf("File upload failed: %v", err)
 		c.JSON(http.StatusInternalServerError, tool.FastReturnError("File upload failed: "+err.Error()))
 		return
@@ -413,11 +493,23 @@ func UserUploadBatch(c *gin.Context) {
 		return
 	}
 
+	// Check if session is cancelled
+	if IsUserUploadSessionCancelled(request.SessionId) {
+		c.JSON(http.StatusConflict, tool.FastReturnError("Upload session cancelled"))
+		return
+	}
+
 	// Get user upload session information
 	sessionInfo := UserUploadSessions.Get(request.SessionId)
 	if sessionInfo.SessionId == "" {
 		c.JSON(http.StatusNotFound, tool.FastReturnError("Session not found or expired"))
 		return
+	}
+
+	// Get session context for cancellation support
+	ctx := GetUserUploadSessionContext(request.SessionId)
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	// Prepare result tracking
@@ -439,6 +531,22 @@ func UserUploadBatch(c *gin.Context) {
 
 	// Process each file
 	for _, fileItem := range request.Files {
+		// Check if cancelled before each file
+		select {
+		case <-ctx.Done():
+			tool.DefaultLogger.Infof("[UploadBatch] Batch upload cancelled: sessionId=%s", request.SessionId)
+			// Mark remaining files as cancelled
+			itemResult := UserUploadItemResult{
+				FileId:  fileItem.FileId,
+				Success: false,
+				Error:   "Upload cancelled",
+			}
+			result.Results = append(result.Results, itemResult)
+			result.Failed++
+			// Break out of the loop and return partial results
+			goto batchComplete
+		default:
+		}
 		itemResult := UserUploadItemResult{
 			FileId:  fileItem.FileId,
 			Success: false,
@@ -505,8 +613,9 @@ func UserUploadBatch(c *gin.Context) {
 		tool.DefaultLogger.Infof("[UploadBatch] File %s: read %d bytes, uploading to %s:%d",
 			fileItem.FileId, len(fileData), targetAddr.IP.String(), targetAddr.Port)
 
-		// Upload file to target device
-		err = transfer.UploadFile(
+		// Upload file to target device with context support
+		err = transfer.UploadFileWithContext(
+			ctx,
 			targetAddr,
 			&sessionInfo.Target.VersionMessage,
 			request.SessionId,
@@ -516,6 +625,14 @@ func UserUploadBatch(c *gin.Context) {
 		)
 
 		if err != nil {
+			// Check if it was cancelled
+			if ctx.Err() != nil {
+				itemResult.Error = "Upload cancelled"
+				result.Results = append(result.Results, itemResult)
+				result.Failed++
+				tool.DefaultLogger.Infof("[UploadBatch] File %s: upload cancelled", fileItem.FileId)
+				goto batchComplete
+			}
 			itemResult.Error = fmt.Sprintf("Upload failed: %v", err)
 			result.Results = append(result.Results, itemResult)
 			result.Failed++
@@ -528,6 +645,7 @@ func UserUploadBatch(c *gin.Context) {
 		}
 	}
 
+batchComplete:
 	tool.DefaultLogger.Infof("[UploadBatch] Batch upload completed: sessionId=%s, success=%d, failed=%d",
 		request.SessionId, result.Success, result.Failed)
 
@@ -551,4 +669,44 @@ func UserUploadBatch(c *gin.Context) {
 			"result":  result,
 		})
 	}
+}
+
+// UserCancelUpload handles cancel upload request (sender side)
+// POST /api/self/v1/cancel-upload
+// Cancels an ongoing upload session and interrupts all uploads
+func UserCancelUpload(c *gin.Context) {
+	sessionId := strings.TrimSpace(c.Query("sessionId"))
+	if sessionId == "" {
+		c.JSON(http.StatusBadRequest, tool.FastReturnError("Missing required parameter: sessionId"))
+		return
+	}
+
+	// Check if session exists
+	sessionInfo := UserUploadSessions.Get(sessionId)
+	if sessionInfo.SessionId == "" {
+		c.JSON(http.StatusNotFound, tool.FastReturnError("Session not found or expired"))
+		return
+	}
+
+	tool.DefaultLogger.Infof("[CancelUpload] Cancelling upload session: sessionId=%s", sessionId)
+
+	// Cancel the session (this will interrupt any ongoing uploads)
+	CancelUserUploadSession(sessionId)
+
+	// Also notify the target device about the cancellation
+	targetAddr := &net.UDPAddr{
+		IP:   net.ParseIP(sessionInfo.Target.Ipaddress).To4(),
+		Port: sessionInfo.Target.VersionMessage.Port,
+	}
+
+	// Send cancel request to target device
+	if err := transfer.CancelSession(targetAddr, &sessionInfo.Target.VersionMessage, sessionId); err != nil {
+		tool.DefaultLogger.Warnf("[CancelUpload] Failed to send cancel request to target: %v", err)
+		// Still return success since local cancellation succeeded
+	} else {
+		tool.DefaultLogger.Infof("[CancelUpload] Cancel request sent to target device")
+	}
+
+	tool.DefaultLogger.Infof("[CancelUpload] Upload session cancelled: sessionId=%s", sessionId)
+	c.JSON(http.StatusOK, tool.FastReturnSuccess())
 }

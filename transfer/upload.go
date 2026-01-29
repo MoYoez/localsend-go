@@ -1,6 +1,7 @@
 package transfer
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -13,6 +14,12 @@ import (
 // UploadFile sends file data to the receiver.
 // Uses sessionId, fileId, and token from /prepare-upload response.
 func UploadFile(targetAddr *net.UDPAddr, remote *types.VersionMessage, sessionId, fileId, token string, data io.Reader) error {
+	return UploadFileWithContext(context.Background(), targetAddr, remote, sessionId, fileId, token, data)
+}
+
+// UploadFileWithContext sends file data to the receiver with context support for cancellation.
+// Uses sessionId, fileId, and token from /prepare-upload response.
+func UploadFileWithContext(ctx context.Context, targetAddr *net.UDPAddr, remote *types.VersionMessage, sessionId, fileId, token string, data io.Reader) error {
 	if targetAddr == nil || remote == nil {
 		return fmt.Errorf("invalid parameters: targetAddr and remote must not be nil")
 	}
@@ -23,13 +30,21 @@ func UploadFile(targetAddr *net.UDPAddr, remote *types.VersionMessage, sessionId
 		return fmt.Errorf("invalid parameters: data must not be nil")
 	}
 
+	// Check if already cancelled
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("upload cancelled: %w", ctx.Err())
+	default:
+	}
+
 	urlBytes, err := tool.BuildUploadURL(targetAddr, remote, sessionId, fileId, token)
 	if err != nil {
 		return fmt.Errorf("failed to build upload URL: %v", err)
 	}
 	url := tool.BytesToString(urlBytes)
 
-	req, err := http.NewRequest("POST", url, data)
+	// Create request with context for cancellation support
+	req, err := http.NewRequestWithContext(ctx, "POST", url, data)
 	if err != nil {
 		return fmt.Errorf("failed to create upload request: %v", err)
 	}
@@ -38,6 +53,10 @@ func UploadFile(targetAddr *net.UDPAddr, remote *types.VersionMessage, sessionId
 	client := tool.GetHttpClient()
 	resp, err := client.Do(req)
 	if err != nil {
+		// Check if it was cancelled
+		if ctx.Err() != nil {
+			return fmt.Errorf("upload cancelled: %w", ctx.Err())
+		}
 		return fmt.Errorf("failed to send upload request: %v", err)
 	}
 	defer resp.Body.Close()

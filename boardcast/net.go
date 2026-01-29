@@ -527,6 +527,11 @@ func ListenMulticastUsingHTTP(self *types.VersionMessageHTTP) {
 		targets = filtered
 
 		// Scan all targets concurrently
+		// set one client, do not use twice :(
+		// solve tls: failed to verify certificate: x509: “LocalSend User” certificate is not standards compliant
+		client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}}
 		for _, ip := range targets {
 			go func(targetIP string) {
 				// due to default set to localsend is https
@@ -538,10 +543,7 @@ func ListenMulticastUsingHTTP(self *types.VersionMessageHTTP) {
 					return
 				}
 				req.Header.Set("Content-Type", "application/json")
-				// solve tls: failed to verify certificate: x509: “LocalSend User” certificate is not standards compliant
-				client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{
-					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-				}}
+
 				resp, err := client.Do(req)
 				var GlobalProtocol = "https"
 				if err != nil {
@@ -558,7 +560,7 @@ func ListenMulticastUsingHTTP(self *types.VersionMessageHTTP) {
 							return
 						}
 						req.Header.Set("Content-Type", "application/json")
-						client = tool.GetHttpClient()
+
 						resp, err = client.Do(req)
 						if err != nil {
 							tool.DefaultLogger.Debugf("ListenMulticastUsingHTTP: failed to send request to %s: %v", url, err)
