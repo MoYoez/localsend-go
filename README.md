@@ -56,7 +56,7 @@ Actually it used for [decky-localsend](https://github.com/moyoez/decky-localsend
 
 ### TODO
 
-1. (maybe) Website Support, but decky-send make it, so i guess I dont make website for this, getting API for your local machine accessing it not a good choice.
+1. (maybe) Website Support, but decky-send make it, so i guess I dont make website for this.
 
 ### Known BUGS
 
