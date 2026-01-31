@@ -31,7 +31,7 @@ var _ types.HandlerInterface = (*Handler)(nil)
 // copyWithContext copies from src to dst while respecting context cancellation.
 // It checks the context periodically during the copy operation.
 func copyWithContext(ctx context.Context, dst io.Writer, src io.Reader) (int64, error) {
-	buf := make([]byte, 32*1024) // 32KB buffer
+	buf := make([]byte, 2*1024*1024) // 2MB buffer
 	var written int64
 	for {
 		// Check if context is cancelled before each read

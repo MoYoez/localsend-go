@@ -7,6 +7,7 @@ import (
 
 	ttlworker "github.com/FloatTech/ttl"
 
+	"github.com/moyoez/localsend-base-protocol-golang/notify"
 	"github.com/moyoez/localsend-base-protocol-golang/tool"
 	"github.com/moyoez/localsend-base-protocol-golang/types"
 )
@@ -28,7 +29,7 @@ type SelfNetworkInfo struct {
 }
 
 const (
-	DefaultTTL = 120 * time.Second
+	DefaultTTL = 300 * time.Second // set 300 seconds.
 )
 
 var (
@@ -36,8 +37,60 @@ var (
 )
 
 func SetUserScanCurrent(sessionId string, data UserScanCurrentItem) {
+	// Check if device exists and if info has changed
+	existing, exists := GetUserScanCurrent(sessionId)
+
+	isNew := !exists
+	isChanged := exists && hasDeviceInfoChanged(existing, data)
+
+	// Set the new data
 	UserScanCurrent.Set(sessionId, data)
 	tool.DefaultLogger.Debugf("Set user scan current: %s", sessionId)
+
+	// Send notification if new device or info changed
+	if isNew || isChanged {
+		var eventType string
+		if isNew {
+			eventType = "device_discovered"
+			tool.DefaultLogger.Infof("New device discovered: %s (%s) at %s", data.Alias, data.Fingerprint, data.Ipaddress)
+		} else {
+			eventType = "device_updated"
+			tool.DefaultLogger.Infof("Device info updated: %s (%s) at %s", data.Alias, data.Fingerprint, data.Ipaddress)
+		}
+
+		// Send notification
+		notification := &notify.Notification{
+			Type:    eventType,
+			Title:   "Device " + map[bool]string{true: "Discovered", false: "Updated"}[isNew],
+			Message: fmt.Sprintf("%s at %s", data.Alias, data.Ipaddress),
+			Data: map[string]any{
+				"fingerprint": data.Fingerprint,
+				"alias":       data.Alias,
+				"ip_address":  data.Ipaddress,
+				"port":        data.Port,
+				"protocol":    data.Protocol,
+				"deviceType":  data.DeviceType,
+				"deviceModel": data.DeviceModel,
+				"version":     data.Version,
+				"isNew":       isNew,
+			},
+		}
+		if err := notify.SendNotification(notification, ""); err != nil {
+			tool.DefaultLogger.Debugf("Failed to send device notification: %v", err)
+		}
+	}
+}
+
+// hasDeviceInfoChanged checks if device info has changed
+func hasDeviceInfoChanged(a, b UserScanCurrentItem) bool {
+	return a.Ipaddress != b.Ipaddress ||
+		a.Fingerprint != b.Fingerprint ||
+		a.Alias != b.Alias ||
+		a.Port != b.Port ||
+		a.Protocol != b.Protocol ||
+		a.DeviceType != b.DeviceType ||
+		a.DeviceModel != b.DeviceModel ||
+		a.Version != b.Version
 }
 
 func GetUserScanCurrent(sessionId string) (UserScanCurrentItem, bool) {

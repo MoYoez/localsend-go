@@ -18,16 +18,20 @@ import (
 
 // Server represents the HTTP API server for receiving TCP API requests
 type Server struct {
-	port     int
-	protocol string
-	handler  *Handler
-	engine   *gin.Engine
-	server   *http.Server
-	mu       sync.RWMutex
+	port       int
+	protocol   string
+	handler    *Handler
+	engine     *gin.Engine
+	server     *http.Server
+	configPath string // path to config file for TLS cert storage
+	mu         sync.RWMutex
 }
 
 // DefaultUploadFolder is the default folder for uploads
 var DefaultUploadFolder = "uploads"
+
+// DefaultConfigPath is the default config file path for TLS cert storage
+var DefaultConfigPath = "config.yaml"
 
 // SetSelfDevice sets the local device info used for user-side scanning.
 func SetSelfDevice(device *types.VersionMessage) {
@@ -50,9 +54,31 @@ func NewServer(port int, protocol string, handler *Handler) *Server {
 		handler = &Handler{}
 	}
 	return &Server{
-		port:     port,
-		protocol: protocol,
-		handler:  handler,
+		port:       port,
+		protocol:   protocol,
+		handler:    handler,
+		configPath: DefaultConfigPath,
+	}
+}
+
+// SetConfigPath sets the config file path for TLS certificate storage
+func SetConfigPath(path string) {
+	DefaultConfigPath = path
+}
+
+// NewServerWithConfig creates a new API server instance with custom config path
+func NewServerWithConfig(port int, protocol string, handler *Handler, configPath string) *Server {
+	if handler == nil {
+		handler = &Handler{}
+	}
+	if configPath == "" {
+		configPath = DefaultConfigPath
+	}
+	return &Server{
+		port:       port,
+		protocol:   protocol,
+		handler:    handler,
+		configPath: configPath,
 	}
 }
 
@@ -97,12 +123,13 @@ func (s *Server) setupRoutes() *gin.Engine {
 	self := engine.Group("/api/self/v1", middlewares.OnlyAllowLocal)
 	{
 		self.GET("/get-network-info", controllers.UserGetNetworkInfo) // Get local network info with IP and segment number
-		self.GET("/scan-current", controllers.UserScanCurrent)
-		self.POST("/prepare-upload", controllers.UserPrepareUpload) // Prepare upload endpoint
-		self.POST("/upload", controllers.UserUpload)                // Actual upload endpoint
-		self.POST("/upload-batch", controllers.UserUploadBatch)     // Batch upload endpoint (supports file:/// protocol)
-		self.GET("/confirm-recv", controllers.UserConfirmRecv)      // Confirm recv endpoint
-		self.POST("/cancel", controllers.UserCancelUpload)          // Cancel upload endpoint (sender side)
+		self.GET("/scan-current", controllers.UserScanCurrent)        // Get current scanned devices
+		self.GET("/scan-now", controllers.UserScanNow)                // Trigger immediate scan based on current config
+		self.POST("/prepare-upload", controllers.UserPrepareUpload)   // Prepare upload endpoint
+		self.POST("/upload", controllers.UserUpload)                  // Actual upload endpoint
+		self.POST("/upload-batch", controllers.UserUploadBatch)       // Batch upload endpoint (supports file:/// protocol)
+		self.GET("/confirm-recv", controllers.UserConfirmRecv)        // Confirm recv endpoint
+		self.POST("/cancel", controllers.UserCancelUpload)            // Cancel upload endpoint (sender side)
 		self.GET("/get-image", controllers.UserGetImage)
 	}
 
@@ -125,10 +152,11 @@ func (s *Server) Start() error {
 	tool.DefaultLogger.Infof("Starting API server on %s", address)
 
 	if s.protocol == "https" {
-		// Generate self-signed TLS certificate
-		certBytes, keyBytes, err := tool.GenerateTLSCert()
+		// Get or create TLS certificate from config
+		cfg := tool.GetCurrentConfig()
+		certBytes, keyBytes, err := tool.GetOrCreateTLSCertFromConfig(cfg)
 		if err != nil {
-			return fmt.Errorf("failed to generate TLS certificate: %v", err)
+			return fmt.Errorf("failed to get TLS certificate: %v", err)
 		}
 
 		// Convert DER format to PEM format
@@ -155,7 +183,7 @@ func (s *Server) Start() error {
 		}
 		s.mu.Unlock()
 
-		tool.DefaultLogger.Infof("TLS certificate generated and configured for HTTPS")
+		tool.DefaultLogger.Infof("TLS certificate configured for HTTPS")
 		return s.server.ListenAndServeTLS("", "")
 	}
 

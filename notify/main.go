@@ -19,7 +19,7 @@ var (
 	// DefaultUnixSocketPath is the default Unix socket path for IPC
 	DefaultUnixSocketPath = "/tmp/localsend-notify.sock"
 	// UnixSocketTimeout is the timeout for Unix socket operations
-	UnixSocketTimeout = 5 * time.Second
+	UnixSocketTimeout = 3 * time.Second // set unix socket quickly
 	UseNotify         = true
 )
 
@@ -86,7 +86,7 @@ func SendNotification(notification *Notification, socketPath string) error {
 	}
 
 	// Parse response
-	var response map[string]interface{}
+	var response map[string]any
 	if n > 0 {
 		if err := sonic.Unmarshal(buf[:n], &response); err != nil {
 			tool.DefaultLogger.Debugf("Unix socket response (raw): %s", string(buf[:n]))
@@ -111,7 +111,7 @@ func SendNotification(notification *Notification, socketPath string) error {
 
 // SendUploadNotification sends upload-related notifications using Unix Domain Socket
 // eventType should be "upload_start" or "upload_end"
-func SendUploadNotification(eventType, sessionId, fileId string, fileInfo map[string]interface{}) error {
+func SendUploadNotification(eventType, sessionId, fileId string, fileInfo map[string]any) error {
 	notification := &Notification{
 		Type: eventType,
 		Data: map[string]any{

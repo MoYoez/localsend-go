@@ -9,8 +9,9 @@ import (
 )
 
 var (
-	DefaultConfigPath = "config.yaml"
-	CurrentConfig     AppConfig
+	DefaultConfigPath    = "config.yaml"
+	CurrentConfig        AppConfig
+	ProgramCurrentConfig ProgramConfig
 )
 
 type AppConfig struct {
@@ -23,14 +24,14 @@ type AppConfig struct {
 	Protocol    string `yaml:"protocol"`
 	Download    bool   `yaml:"download"`
 	Announce    bool   `yaml:"announce"`
+	CertPEM     string `yaml:"certPEM,omitempty"`
+	KeyPEM      string `yaml:"keyPEM,omitempty"`
 }
 
 type ProgramConfig struct {
 	Pin      string `yaml:"pin"`
 	AutoSave bool   `yaml:"autoSave"`
 }
-
-var ProgramCurrentConfig ProgramConfig
 
 func init() {
 	ProgramCurrentConfig = DefaultProgramConfig()
@@ -59,35 +60,39 @@ func defaultConfig() AppConfig {
 		Version:     "2.0",           // Protocol Version: maybe(
 		DeviceModel: "steamdeck",     // you can change it if you prefer.
 		DeviceType:  "headless",      // maybe you can change it, I promise it will not burn others machine:(
-		Fingerprint: generateFingerprint(),
-		Port:        53317,   // default , in normal cases you dont need to change it.
-		Protocol:    "https", // ENCRYPTION is very important, I dont mind you to switch to http if you are in your home or safe network.
-		Download:    false,   // document said that  default is false, i dont know how to use it, so make it default.
+		Fingerprint: "",              // will be set based on protocol
+		Port:        53317,           // default , in normal cases you dont need to change it.
+		Protocol:    "https",         // ENCRYPTION is very important, I dont mind you to switch to http if you are in your home or safe network.
+		Download:    false,           // document said that  default is false, i dont know how to use it, so make it default.
 		Announce:    true,
 	}
 }
 
-// generateFingerprint generate a 32 characters long random string
-func generateFingerprint() string {
+// generateRandomFingerprint generates a random 32-character fingerprint
+func generateRandomFingerprintForConfig() string {
 	uuid := GenerateRandomUUID()
-	// remove hyphen, ensure 32 characters
 	return strings.ReplaceAll(uuid, "-", "")
 }
 
 func LoadConfig(path string) (AppConfig, error) {
-	cfg := defaultConfig()
 	if path == "" {
 		path = DefaultConfigPath
 	}
+
+	cfg := defaultConfig()
+	configChanged := false
+
 	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// generate fingerprint
-			cfg.Fingerprint = generateFingerprint()
+			// Config file doesn't exist, create with default values
+			// Default protocol is https, so generate fingerprint from TLS certificate
+			cfg.Fingerprint = GetOrCreateFingerprintFromConfig(&cfg)
+			configChanged = true
 			if writeErr := writeDefaultConfig(path, cfg); writeErr != nil {
 				return cfg, fmt.Errorf("config file not found, and failed to generate default config: %v", writeErr)
 			}
-			// hello, world!
+			DefaultLogger.Infof("Created new config file with fingerprint and certificate")
 			CurrentConfig = cfg
 			return cfg, nil
 		}
@@ -102,6 +107,39 @@ func LoadConfig(path string) (AppConfig, error) {
 	}
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return cfg, fmt.Errorf("failed to parse config file: %v", err)
+	}
+
+	// Handle fingerprint based on protocol
+	if cfg.Protocol == "https" {
+		// HTTPS mode: fingerprint should match TLS certificate
+		oldFingerprint := cfg.Fingerprint
+		tlsFingerprint := GetOrCreateFingerprintFromConfig(&cfg)
+		if oldFingerprint != tlsFingerprint {
+			DefaultLogger.Infof("Updating fingerprint to match TLS certificate: %s -> %s", oldFingerprint, tlsFingerprint)
+			cfg.Fingerprint = tlsFingerprint
+			configChanged = true
+		}
+	} else {
+		// HTTP mode: use random fingerprint if not set, clear certificate data
+		if cfg.Fingerprint == "" {
+			cfg.Fingerprint = generateRandomFingerprintForConfig()
+			DefaultLogger.Infof("HTTP mode: generated random fingerprint")
+			configChanged = true
+		}
+		// Clear certificate data in HTTP mode
+		if cfg.CertPEM != "" || cfg.KeyPEM != "" {
+			cfg.CertPEM = ""
+			cfg.KeyPEM = ""
+			configChanged = true
+		}
+		DefaultLogger.Debugf("HTTP mode: no TLS certificate needed")
+	}
+
+	// Save config if changed
+	if configChanged {
+		if writeErr := writeDefaultConfig(path, cfg); writeErr != nil {
+			DefaultLogger.Warnf("Failed to update config file: %v", writeErr)
+		}
 	}
 
 	CurrentConfig = cfg

@@ -76,45 +76,53 @@ func main() {
 	}
 
 	handler := api.NewDefaultHandler()
+	// Determine config path for TLS certificate storage
+	configPath := cfg.UseConfigPath
+	if configPath == "" {
+		configPath = tool.DefaultConfigPath
+	}
 	// due to protocol request, need to 53317 by default
-	apiServer := api.NewServer(53317, appCfg.Protocol, handler)
+	apiServer := api.NewServerWithConfig(53317, appCfg.Protocol, handler, configPath)
 	go func() {
 		if err := apiServer.Start(); err != nil {
 			tool.DefaultLogger.Fatalf("API server startup failed: %v", err)
 		}
 	}()
 
+	// Prepare HTTP version message for scan config
+	httpMessage := &types.VersionMessageHTTP{
+		Alias:       appCfg.Alias,
+		Version:     appCfg.Version,
+		DeviceModel: appCfg.DeviceModel,
+		DeviceType:  appCfg.DeviceType,
+		Fingerprint: appCfg.Fingerprint,
+		Port:        appCfg.Port,
+		Protocol:    appCfg.Protocol,
+		Download:    appCfg.Download,
+	}
+
+	// Set scan timeout (default 500 seconds)
+	scanTimeout := cfg.ScanTimeout
+
 	switch {
 	case cfg.UseLegacyMode:
 		tool.DefaultLogger.Info("Using Legacy Mode: HTTP scanning (scanning every 30 seconds)")
-		go boardcast.ListenMulticastUsingHTTP(&types.VersionMessageHTTP{
-			Alias:       appCfg.Alias,
-			Version:     appCfg.Version,
-			DeviceModel: appCfg.DeviceModel,
-			DeviceType:  appCfg.DeviceType,
-			Fingerprint: appCfg.Fingerprint,
-			Port:        appCfg.Port,
-			Protocol:    appCfg.Protocol,
-			Download:    appCfg.Download,
-		})
+		// Set scan config for scan-now API
+		boardcast.SetScanConfig(boardcast.ScanModeHTTP, message, httpMessage, scanTimeout)
+		go boardcast.ListenMulticastUsingHTTPWithTimeout(httpMessage, scanTimeout)
 	case cfg.UseMixedScan:
 		tool.DefaultLogger.Info("Using Mixed Scan Mode: UDP and HTTP scanning")
+		// Set scan config for scan-now API
+		boardcast.SetScanConfig(boardcast.ScanModeMixed, message, httpMessage, scanTimeout)
 		go boardcast.ListenMulticastUsingUDP(message)
-		go boardcast.SendMulticastUsingUDP(message)
-		go boardcast.ListenMulticastUsingHTTP(&types.VersionMessageHTTP{
-			Alias:       appCfg.Alias,
-			Version:     appCfg.Version,
-			DeviceModel: appCfg.DeviceModel,
-			DeviceType:  appCfg.DeviceType,
-			Fingerprint: appCfg.Fingerprint,
-			Port:        appCfg.Port,
-			Protocol:    appCfg.Protocol,
-			Download:    appCfg.Download,
-		})
+		go boardcast.SendMulticastUsingUDPWithTimeout(message, scanTimeout)
+		go boardcast.ListenMulticastUsingHTTPWithTimeout(httpMessage, scanTimeout)
 	default:
 		tool.DefaultLogger.Info("Using UDP multicast mode")
+		// Set scan config for scan-now API
+		boardcast.SetScanConfig(boardcast.ScanModeUDP, message, httpMessage, scanTimeout)
 		go boardcast.ListenMulticastUsingUDP(message)
-		go boardcast.SendMulticastUsingUDP(message)
+		go boardcast.SendMulticastUsingUDPWithTimeout(message, scanTimeout)
 	}
 
 	select {}

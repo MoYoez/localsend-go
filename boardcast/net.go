@@ -21,6 +21,23 @@ import (
 	"github.com/moyoez/localsend-base-protocol-golang/types"
 )
 
+// ScanMode defines the scanning mode
+type ScanMode int
+
+const (
+	ScanModeUDP   ScanMode = iota // UDP multicast only
+	ScanModeHTTP                  // HTTP scanning only (legacy mode)
+	ScanModeMixed                 // Both UDP and HTTP scanning
+)
+
+// ScanConfig holds the current scan configuration for scan-now API
+type ScanConfig struct {
+	Mode        ScanMode
+	SelfMessage *types.VersionMessage
+	SelfHTTP    *types.VersionMessageHTTP
+	Timeout     int // timeout in seconds, 0 means no timeout
+}
+
 // refer to https://github.com/localsend/protocol/blob/main/README.md#1-defaults
 const (
 	defaultMultcastAddress = "224.0.0.167"
@@ -43,6 +60,16 @@ var (
 	networkIPsCacheMu  sync.RWMutex
 	networkIPsCache    []string
 	networkIPsCacheKey string // stores interface addresses hash to detect changes
+
+	// currentScanConfig holds the current scan configuration
+	currentScanConfigMu sync.RWMutex
+	currentScanConfig   *ScanConfig
+
+	// autoScanControl controls the auto scan loops
+	autoScanControlMu   sync.Mutex
+	autoScanRestartCh   chan struct{} // channel to signal restart
+	autoScanHTTPRunning bool
+	autoScanUDPRunning  bool
 )
 
 // SetMultcastAddress overrides the default multicast address if non-empty.
@@ -208,10 +235,39 @@ func ListenMulticastUsingUDP(self *types.VersionMessage) {
 // SendMulticastUsingUDP sends a multicast message to the multicast address to announce the device.
 // https://github.com/localsend/protocol/blob/main/README.md#31-multicast-udp-default
 func SendMulticastUsingUDP(message *types.VersionMessage) error {
+	return SendMulticastUsingUDPWithTimeout(message, 0)
+}
+
+// SendMulticastUsingUDPWithTimeout sends multicast messages with configurable timeout.
+// timeout: total duration in seconds after which sending stops. 0 means no timeout.
+// Supports restart via RestartAutoScan() which resets the timeout timer.
+func SendMulticastUsingUDPWithTimeout(message *types.VersionMessage, timeout int) error {
 	addr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:%d", multcastAddress, multcastPort))
 	if err != nil {
 		return fmt.Errorf("failed to resolve UDP address: %v", err)
 	}
+
+	// Register UDP scan as running and get restart channel
+	autoScanControlMu.Lock()
+	autoScanUDPRunning = true
+	if autoScanRestartCh == nil {
+		autoScanRestartCh = make(chan struct{}, 1)
+	}
+	restartCh := autoScanRestartCh
+	autoScanControlMu.Unlock()
+
+	defer func() {
+		autoScanControlMu.Lock()
+		autoScanUDPRunning = false
+		autoScanControlMu.Unlock()
+	}()
+
+	if timeout > 0 {
+		tool.DefaultLogger.Infof("Starting UDP multicast sending (every 30 seconds, timeout: %d seconds)", timeout)
+	} else {
+		tool.DefaultLogger.Info("Starting UDP multicast sending (every 30 seconds, no timeout)")
+	}
+
 	var c *net.UDPConn
 	dialConn := func() error {
 		conn, dialErr := net.DialUDP("udp4", nil, addr)
@@ -227,19 +283,51 @@ func SendMulticastUsingUDP(message *types.VersionMessage) error {
 	if err := dialConn(); err != nil {
 		return fmt.Errorf("failed to dial UDP address: %v", err)
 	}
-	for {
+	defer func() {
+		if c != nil {
+			c.Close()
+		}
+	}()
+
+	// Setup timeout timer if timeout > 0
+	var timeoutTimer *time.Timer
+	var timeoutCh <-chan time.Time
+	resetTimeout := func() {
+		if timeout > 0 {
+			if timeoutTimer != nil {
+				timeoutTimer.Stop()
+			}
+			timeoutTimer = time.NewTimer(time.Duration(timeout) * time.Second)
+			timeoutCh = timeoutTimer.C
+			tool.DefaultLogger.Infof("UDP scan timeout reset to %d seconds", timeout)
+		}
+	}
+	if timeout > 0 {
+		timeoutTimer = time.NewTimer(time.Duration(timeout) * time.Second)
+		timeoutCh = timeoutTimer.C
+	}
+	defer func() {
+		if timeoutTimer != nil {
+			timeoutTimer.Stop()
+		}
+	}()
+
+	startTime := time.Now()
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	// Send immediately first
+	sendOnce := func() {
 		if c == nil {
 			if err := dialConn(); err != nil {
 				tool.DefaultLogger.Errorf("failed to dial UDP address: %v", err)
-				time.Sleep(5 * time.Second)
-				continue
+				return
 			}
 		}
 		payload, err := sonic.Marshal(message)
 		if err != nil {
 			tool.DefaultLogger.Errorf("failed to marshal message: %v", err)
-			time.Sleep(5 * time.Second)
-			continue
+			return
 		}
 		_, err = c.Write(payload)
 		if err != nil {
@@ -251,7 +339,26 @@ func SendMulticastUsingUDP(message *types.VersionMessage) error {
 				tool.DefaultLogger.Errorf("failed to write message: %v", err)
 			}
 		}
-		time.Sleep(5 * time.Second)
+	}
+
+	// Initial send
+	sendOnce()
+
+	// Continue sending until timeout
+	for {
+		select {
+		case <-timeoutCh:
+			elapsed := time.Since(startTime)
+			tool.DefaultLogger.Infof("UDP multicast sending stopped after timeout (%v elapsed)", elapsed.Round(time.Second))
+			return nil
+		case <-restartCh:
+			// Restart signal received, reset timeout and continue sending
+			resetTimeout()
+			startTime = time.Now()
+			sendOnce()
+		case <-ticker.C:
+			sendOnce()
+		}
 	}
 }
 
@@ -305,7 +412,7 @@ func CallbackMulticastMessageUsingTCP(targetAddr *net.UDPAddr, self *types.Callb
 		return err
 	}
 	// Try sending register request via HTTP
-	if sendErr := sendRegisterRequest(tool.BytesToString(url), remote.Protocol, tool.BytesToString(payload)); sendErr != nil {
+	if sendErr := sendRegisterRequest(tool.BytesToString(url), tool.BytesToString(payload)); sendErr != nil {
 		// debug what msg sent
 		tool.DefaultLogger.Warnf("Failed to send register request via HTTP: %v. Falling back to UDP multicast.", sendErr)
 		// Fallback: Respond using UDP multicast (announce=false)
@@ -490,23 +597,50 @@ func quickTCPProbe(ip string, port int) bool {
 	addr := net.JoinHostPort(ip, strconv.Itoa(port))
 	conn, err := net.DialTimeout("tcp", addr, tcpProbeTimeout)
 	if err != nil {
+		//	tool.DefaultLogger.Debugf("quickTCPProbe: failed to dial %s: %v", addr, err)
 		return false
 	}
+	tool.DefaultLogger.Debugf("quickTCPProbe: dial %s success", addr)
 	conn.Close()
 	return true
 }
 
 // Legacy: HTTP-only fallback for devices that don't support UDP multicast.
 // If multicast fails, send an HTTP POST to /api/localsend/v2/register on all local IPs to discover devices.
-// This function runs in a loop, scanning every 30 seconds.
+// This function runs in a loop, scanning every 30 seconds until timeout.
 // Optimized with: TCP quick probe, concurrency limit, and shorter timeouts.
 func ListenMulticastUsingHTTP(self *types.VersionMessageHTTP) {
+	ListenMulticastUsingHTTPWithTimeout(self, 0)
+}
+
+// ListenMulticastUsingHTTPWithTimeout is the same as ListenMulticastUsingHTTP but with configurable timeout.
+// timeout: total duration in seconds after which scanning stops. 0 means no timeout.
+func ListenMulticastUsingHTTPWithTimeout(self *types.VersionMessageHTTP, timeout int) {
 	if self == nil {
 		tool.DefaultLogger.Warn("ListenMulticastUsingHTTP: self is nil")
 		return
 	}
 
-	tool.DefaultLogger.Info("Starting Legacy Mode HTTP scanning (scanning every 30 seconds)")
+	// Register HTTP scan as running and get restart channel
+	autoScanControlMu.Lock()
+	autoScanHTTPRunning = true
+	if autoScanRestartCh == nil {
+		autoScanRestartCh = make(chan struct{}, 1)
+	}
+	restartCh := autoScanRestartCh
+	autoScanControlMu.Unlock()
+
+	defer func() {
+		autoScanControlMu.Lock()
+		autoScanHTTPRunning = false
+		autoScanControlMu.Unlock()
+	}()
+
+	if timeout > 0 {
+		tool.DefaultLogger.Infof("Starting Legacy Mode HTTP scanning (scanning every 30 seconds, timeout: %d seconds)", timeout)
+	} else {
+		tool.DefaultLogger.Info("Starting Legacy Mode HTTP scanning (scanning every 30 seconds, no timeout)")
+	}
 
 	payloadBytes, err := sonic.Marshal(self)
 	if err != nil {
@@ -529,9 +663,34 @@ func ListenMulticastUsingHTTP(self *types.VersionMessageHTTP) {
 		},
 	}
 
-	// Scan loop: every 20 seconds
-	ticker := time.NewTicker(20 * time.Second)
+	// Scan loop: every 30 seconds
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
+
+	// Setup timeout timer if timeout > 0
+	var timeoutTimer *time.Timer
+	var timeoutCh <-chan time.Time
+	resetTimeout := func() {
+		if timeout > 0 {
+			if timeoutTimer != nil {
+				timeoutTimer.Stop()
+			}
+			timeoutTimer = time.NewTimer(time.Duration(timeout) * time.Second)
+			timeoutCh = timeoutTimer.C
+			tool.DefaultLogger.Infof("HTTP scan timeout reset to %d seconds", timeout)
+		}
+	}
+	if timeout > 0 {
+		timeoutTimer = time.NewTimer(time.Duration(timeout) * time.Second)
+		timeoutCh = timeoutTimer.C
+	}
+	defer func() {
+		if timeoutTimer != nil {
+			timeoutTimer.Stop()
+		}
+	}()
+
+	startTime := time.Now()
 
 	// Perform initial scan immediately
 	scanOnce := func() {
@@ -545,7 +704,7 @@ func ListenMulticastUsingHTTP(self *types.VersionMessageHTTP) {
 			return
 		}
 
-		tool.DefaultLogger.Debugf("ListenMulticastUsingHTTP: scanning %d IP addresses", len(targets))
+		//	tool.DefaultLogger.Debugf("ListenMulticastUsingHTTP: scanning %d IP addresses", len(targets))
 
 		// remove self ip here.
 
@@ -574,6 +733,7 @@ func ListenMulticastUsingHTTP(self *types.VersionMessageHTTP) {
 				defer func() { <-sem }()
 
 				// Quick TCP probe first - skip if port is not open
+
 				if !quickTCPProbe(targetIP, multcastPort) {
 					return
 				}
@@ -591,7 +751,7 @@ func ListenMulticastUsingHTTP(self *types.VersionMessageHTTP) {
 				resp, err := httpClient.Do(req)
 				globalProtocol := "https"
 				if err != nil {
-					// tool.DefaultLogger.Debugf("ListenMulticastUsingHTTP: failed to send request to %s: %v", url, err)
+					//	tool.DefaultLogger.Debugf("ListenMulticastUsingHTTP: failed to send request to %s: %v", url, err)
 					//  check if is tls error, if is, try to use http protocol.
 					if strings.Contains(err.Error(), "EOF") {
 						tool.DefaultLogger.Warnf("Detected error, trying to use http protocol: %v", err.Error())
@@ -660,22 +820,32 @@ func ListenMulticastUsingHTTP(self *types.VersionMessageHTTP) {
 	// Initial scan
 	scanOnce()
 
-	// Continue scanning every 30 seconds
-	for range ticker.C {
-		scanOnce()
+	// Continue scanning every 30 seconds until timeout
+	for {
+		select {
+		case <-timeoutCh:
+			elapsed := time.Since(startTime)
+			tool.DefaultLogger.Infof("HTTP scanning stopped after timeout (%v elapsed)", elapsed.Round(time.Second))
+			return
+		case <-restartCh:
+			// Restart signal received, reset timeout and continue scanning
+			resetTimeout()
+			startTime = time.Now()
+			scanOnce()
+		case <-ticker.C:
+			scanOnce()
+		}
 	}
 }
 
 // sendRegisterRequest sends a register request to the remote device.
-func sendRegisterRequest(url string, protocol string, payload string) error {
+func sendRegisterRequest(url string, payload string) error {
 	req, err := http.NewRequest("POST", url, bytes.NewReader(tool.StringToBytes(payload)))
 	if err != nil {
 		return fmt.Errorf("failed to create register request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	tool.DefaultLogger.Debugf("Sent: %s", url)
-	tool.DefaultLogger.Debugf("Payload: %s", payload)
-	tool.DefaultLogger.Debugf("Protocol: %s", protocol)
+	tool.DefaultLogger.Debugf("Sent: %s, using Payload: %s", url, payload)
 
 	client := tool.GetHttpClient()
 	resp, err := client.Do(req)
@@ -747,4 +917,284 @@ func shouldRespond(self *types.VersionMessage, incoming *types.VersionMessage) b
 		return false
 	}
 	return true
+}
+
+// SetScanConfig sets the current scan configuration for scan-now API
+func SetScanConfig(mode ScanMode, selfMessage *types.VersionMessage, selfHTTP *types.VersionMessageHTTP, timeout int) {
+	currentScanConfigMu.Lock()
+	defer currentScanConfigMu.Unlock()
+	currentScanConfig = &ScanConfig{
+		Mode:        mode,
+		SelfMessage: selfMessage,
+		SelfHTTP:    selfHTTP,
+		Timeout:     timeout,
+	}
+}
+
+// GetScanConfig returns the current scan configuration
+func GetScanConfig() *ScanConfig {
+	currentScanConfigMu.RLock()
+	defer currentScanConfigMu.RUnlock()
+	return currentScanConfig
+}
+
+// ScanOnceHTTP performs a single HTTP scan for devices.
+// This is extracted from ListenMulticastUsingHTTP for reuse.
+func ScanOnceHTTP(self *types.VersionMessageHTTP) error {
+	if self == nil {
+		return fmt.Errorf("self message is nil")
+	}
+
+	payloadBytes, err := sonic.Marshal(self)
+	if err != nil {
+		return fmt.Errorf("failed to marshal self message: %v", err)
+	}
+
+	targets, err := getCachedNetworkIPs()
+	if err != nil {
+		return fmt.Errorf("failed to get network IPs: %v", err)
+	}
+	if len(targets) == 0 {
+		return fmt.Errorf("no usable local IPv4 addresses found")
+	}
+
+	tool.DefaultLogger.Debugf("ScanOnceHTTP: scanning %d IP addresses", len(targets))
+
+	// Remove self IP
+	selfIPs := tool.GetLocalIPv4Set()
+	filtered := targets[:0]
+	for _, ip := range targets {
+		if _, isSelf := selfIPs[ip]; isSelf {
+			continue
+		}
+		filtered = append(filtered, ip)
+	}
+	targets = filtered
+
+	// Create HTTP client
+	httpClient := &http.Client{
+		Timeout: httpScanTimeout,
+		Transport: &http.Transport{
+			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+			MaxIdleConns:        50,
+			MaxIdleConnsPerHost: 5,
+			IdleConnTimeout:     10 * time.Second,
+			DisableKeepAlives:   false,
+		},
+	}
+
+	// Use semaphore to limit concurrency
+	sem := make(chan struct{}, httpScanConcurrencyLimit)
+	var wg sync.WaitGroup
+
+	for _, ip := range targets {
+		wg.Add(1)
+		go func(targetIP string) {
+			defer wg.Done()
+
+			// Acquire semaphore
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			// Quick TCP probe first
+			if !quickTCPProbe(targetIP, multcastPort) {
+				return
+			}
+
+			// Port is open, proceed with HTTP request
+			protocol := "https"
+			url := fmt.Sprintf("%s://%s:%d/api/localsend/v2/register", protocol, targetIP, multcastPort)
+			req, err := http.NewRequest("POST", url, bytes.NewReader(payloadBytes))
+			if err != nil {
+				return
+			}
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := httpClient.Do(req)
+			globalProtocol := "https"
+			if err != nil {
+
+				if strings.Contains(err.Error(), "EOF") {
+					protocol = "http"
+					globalProtocol = "http"
+					url = fmt.Sprintf("%s://%s:%d/api/localsend/v2/register", protocol, targetIP, multcastPort)
+					req, err = http.NewRequest("POST", url, bytes.NewReader(payloadBytes))
+					if err != nil {
+						return
+					}
+					req.Header.Set("Content-Type", "application/json")
+
+					resp, err = httpClient.Do(req)
+					if err != nil {
+						return
+					}
+				} else {
+					return
+				}
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+				return
+			}
+
+			var remote types.CallbackLegacyVersionMessageHTTP
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return
+			}
+			if err := sonic.Unmarshal(body, &remote); err != nil {
+				return
+			}
+			tool.DefaultLogger.Infof("ScanOnceHTTP: discovered device at %s: %s (fingerprint: %s)", url, remote.Alias, remote.Fingerprint)
+			if remote.Fingerprint != "" {
+				share.SetUserScanCurrent(remote.Fingerprint, share.UserScanCurrentItem{
+					Ipaddress: targetIP,
+					VersionMessage: types.VersionMessage{
+						Alias:       remote.Alias,
+						Version:     remote.Version,
+						DeviceModel: remote.DeviceModel,
+						DeviceType:  remote.DeviceType,
+						Fingerprint: remote.Fingerprint,
+						Port:        multcastPort,
+						Protocol:    globalProtocol,
+						Download:    remote.Download,
+						Announce:    true,
+					},
+				})
+			}
+		}(ip)
+	}
+
+	wg.Wait()
+	return nil
+}
+
+// ScanOnceUDP sends a single UDP multicast message to trigger device discovery.
+func ScanOnceUDP(message *types.VersionMessage) error {
+	return SendMulticastOnce(message)
+}
+
+// RestartAutoScan sends a restart signal to all running auto scan loops.
+// This resets their timeout timers and triggers an immediate scan.
+func RestartAutoScan() {
+	autoScanControlMu.Lock()
+	defer autoScanControlMu.Unlock()
+
+	if autoScanRestartCh == nil {
+		tool.DefaultLogger.Debug("No auto scan restart channel, creating one")
+		autoScanRestartCh = make(chan struct{}, 1)
+	}
+
+	// Send restart signal (non-blocking)
+	select {
+	case autoScanRestartCh <- struct{}{}:
+		tool.DefaultLogger.Info("Auto scan restart signal sent")
+	default:
+		tool.DefaultLogger.Debug("Auto scan restart channel full, signal already pending")
+	}
+}
+
+// IsAutoScanRunning returns whether any auto scan loop is currently running.
+func IsAutoScanRunning() bool {
+	autoScanControlMu.Lock()
+	defer autoScanControlMu.Unlock()
+	return autoScanHTTPRunning || autoScanUDPRunning
+}
+
+// ScanNow performs a single scan based on current configuration.
+// If auto scan has timed out (stopped), it restarts the auto scan loops.
+// If auto scan is still running, it sends a restart signal to reset the timeout.
+// Returns error if scan config is not set or scan fails.
+func ScanNow() error {
+	config := GetScanConfig()
+	if config == nil {
+		return fmt.Errorf("scan config not set")
+	}
+
+	tool.DefaultLogger.Info("Performing manual scan...")
+
+	// Check if auto scan is still running
+	if IsAutoScanRunning() {
+		// Auto scan is running, send restart signal to reset timeout
+		tool.DefaultLogger.Debug("Auto scan is running, sending restart signal")
+		RestartAutoScan()
+	} else {
+		// Auto scan has stopped (timed out), restart the goroutines
+		tool.DefaultLogger.Info("Auto scan has stopped, restarting auto scan loops")
+		restartAutoScanLoops(config)
+	}
+
+	switch config.Mode {
+	case ScanModeUDP:
+		if config.SelfMessage == nil {
+			return fmt.Errorf("self message not configured for UDP scan")
+		}
+		tool.DefaultLogger.Debug("Sending UDP multicast scan...")
+		return ScanOnceUDP(config.SelfMessage)
+
+	case ScanModeHTTP:
+		if config.SelfHTTP == nil {
+			return fmt.Errorf("self HTTP message not configured for HTTP scan")
+		}
+		tool.DefaultLogger.Debug("Performing HTTP scan...")
+		return ScanOnceHTTP(config.SelfHTTP)
+
+	case ScanModeMixed:
+		var udpErr, httpErr error
+
+		// UDP scan
+		if config.SelfMessage != nil {
+			tool.DefaultLogger.Debug("Sending UDP multicast scan (mixed mode)...")
+			udpErr = ScanOnceUDP(config.SelfMessage)
+			if udpErr != nil {
+				tool.DefaultLogger.Warnf("UDP scan failed: %v", udpErr)
+			}
+		}
+
+		// HTTP scan
+		if config.SelfHTTP != nil {
+			tool.DefaultLogger.Debug("Performing HTTP scan (mixed mode)...")
+			httpErr = ScanOnceHTTP(config.SelfHTTP)
+			if httpErr != nil {
+				tool.DefaultLogger.Warnf("HTTP scan failed: %v", httpErr)
+			}
+		}
+
+		// Return error only if both failed
+		if udpErr != nil && httpErr != nil {
+			return fmt.Errorf("both UDP and HTTP scan failed: UDP: %v, HTTP: %v", udpErr, httpErr)
+		}
+		return nil
+
+	default:
+		return fmt.Errorf("unknown scan mode: %d", config.Mode)
+	}
+}
+
+// restartAutoScanLoops restarts the auto scan goroutines based on configuration.
+// This is called when auto scan has timed out and needs to be restarted.
+func restartAutoScanLoops(config *ScanConfig) {
+	if config == nil {
+		return
+	}
+
+	timeout := config.Timeout
+
+	switch config.Mode {
+	case ScanModeUDP:
+		if config.SelfMessage != nil {
+			go SendMulticastUsingUDPWithTimeout(config.SelfMessage, timeout)
+		}
+	case ScanModeHTTP:
+		if config.SelfHTTP != nil {
+			go ListenMulticastUsingHTTPWithTimeout(config.SelfHTTP, timeout)
+		}
+	case ScanModeMixed:
+		if config.SelfMessage != nil {
+			go SendMulticastUsingUDPWithTimeout(config.SelfMessage, timeout)
+		}
+		if config.SelfHTTP != nil {
+			go ListenMulticastUsingHTTPWithTimeout(config.SelfHTTP, timeout)
+		}
+	}
 }
