@@ -48,6 +48,7 @@ Actually it used for [decky-localsend](https://github.com/moyoez/decky-localsend
 | `-useHttps`                   | bool    | true    | If true, use https (encrypted); if false, use http (unencrypted). Alias for protocol config. |
 | `-useMixedScan`               | bool    | false   | Use mixed scan mode (both UDP and HTTP for discovery)                                        |
 | `-skipNotify`                 | bool    | false   | Skip notification mode                                                                       |
+| `-scanTimeout`                | int     | 500       | Timeout for device scan, in seconds                                                           |
 
 
 > Most of cases, mixed mode works well for most cases, if you prefer to reduce the power cost for your machine, switching to (Normal Mode - UDP Detected.) ,it will not make scan to the whole net.
