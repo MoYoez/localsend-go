@@ -16,6 +16,14 @@ type SessionContext struct {
 	Cancel context.CancelFunc
 }
 
+// SessionUploadStats tracks upload statistics for a session
+type SessionUploadStats struct {
+	TotalFiles    int
+	SuccessFiles  int
+	FailedFiles   int
+	FailedFileIds []string
+}
+
 var (
 	uploadSessionMu     sync.RWMutex
 	DefaultUploadFolder = "uploads"
@@ -25,6 +33,8 @@ var (
 	v1Sessions          = ttlworker.NewCache[string, string](tool.DefaultTTL)
 	// sessionContexts stores the context for each session to support cancellation
 	sessionContexts = ttlworker.NewCache[string, *SessionContext](tool.DefaultTTL)
+	// uploadStats tracks success/failure counts per session
+	uploadStats = ttlworker.NewCache[string, *SessionUploadStats](tool.DefaultTTL)
 )
 
 func CacheUploadSession(sessionId string, files map[string]types.FileInfo) {
@@ -59,6 +69,75 @@ func RemoveUploadedFile(sessionId, fileId string) {
 		return
 	}
 	uploadSessions.Set(sessionId, files)
+}
+
+// InitSessionStats initializes upload statistics for a session
+func InitSessionStats(sessionId string, totalFiles int) {
+	uploadSessionMu.Lock()
+	defer uploadSessionMu.Unlock()
+	uploadStats.Set(sessionId, &SessionUploadStats{
+		TotalFiles:    totalFiles,
+		SuccessFiles:  0,
+		FailedFiles:   0,
+		FailedFileIds: make([]string, 0),
+	})
+}
+
+// MarkFileUploadedAndCheckComplete marks a file as uploaded (success or failure) and returns
+// (remaining, isLast, stats) to help determine if all files are done
+func MarkFileUploadedAndCheckComplete(sessionId, fileId string, success bool) (remaining int, isLast bool, stats *SessionUploadStats) {
+	uploadSessionMu.Lock()
+	defer uploadSessionMu.Unlock()
+
+	files := uploadSessions.Get(sessionId)
+	if files == nil {
+		return 0, true, nil
+	}
+
+	// Update stats
+	sessionStats := uploadStats.Get(sessionId)
+	if sessionStats == nil {
+		sessionStats = &SessionUploadStats{
+			TotalFiles:    len(files),
+			FailedFileIds: make([]string, 0),
+		}
+	}
+
+	if success {
+		sessionStats.SuccessFiles++
+	} else {
+		sessionStats.FailedFiles++
+		sessionStats.FailedFileIds = append(sessionStats.FailedFileIds, fileId)
+	}
+	uploadStats.Set(sessionId, sessionStats)
+
+	// Remove from pending files
+	delete(files, fileId)
+	remaining = len(files)
+	isLast = remaining == 0
+
+	if isLast {
+		uploadSessions.Delete(sessionId)
+		// Keep stats for the notification, will be cleaned up later
+	} else {
+		uploadSessions.Set(sessionId, files)
+	}
+
+	return remaining, isLast, sessionStats
+}
+
+// GetSessionStats returns the upload statistics for a session
+func GetSessionStats(sessionId string) *SessionUploadStats {
+	uploadSessionMu.RLock()
+	defer uploadSessionMu.RUnlock()
+	return uploadStats.Get(sessionId)
+}
+
+// CleanupSessionStats removes the upload statistics for a session
+func CleanupSessionStats(sessionId string) {
+	uploadSessionMu.Lock()
+	defer uploadSessionMu.Unlock()
+	uploadStats.Delete(sessionId)
 }
 
 func RemoveUploadSession(sessionId string) {

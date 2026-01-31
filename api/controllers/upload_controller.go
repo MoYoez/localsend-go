@@ -82,8 +82,11 @@ func (ctrl *UploadController) HandlePrepareUpload(c *gin.Context) {
 		}
 	}
 
-	// Send upload start notifications for each file
+	// Initialize session stats and send upload start notifications
 	if response != nil && response.SessionId != "" {
+		// Initialize upload statistics for this session
+		models.InitSessionStats(response.SessionId, len(request.Files))
+
 		for fileID := range request.Files {
 			fileInfo := request.Files[fileID]
 			// Send notification asynchronously to avoid blocking the response
@@ -103,7 +106,6 @@ func (ctrl *UploadController) HandlePrepareUpload(c *gin.Context) {
 			}(response.SessionId, fileID, fileInfo)
 		}
 		tool.DefaultLogger.Infof("[PrepareUpload] Successfully prepared upload session: %s", response.SessionId)
-
 	}
 
 	c.JSON(http.StatusOK, response)
@@ -168,6 +170,9 @@ func (ctrl *UploadController) HandlePrepareV1Upload(c *gin.Context) {
 	if response != nil && response.SessionId != "" {
 		models.StoreV1Session(remoteAddr, response.SessionId)
 
+		// Initialize upload statistics for this session
+		models.InitSessionStats(response.SessionId, len(request.Files))
+
 		// Send upload start notifications for each file
 		for fileID := range request.Files {
 			fileInfo := request.Files[fileID]
@@ -215,12 +220,38 @@ func (ctrl *UploadController) HandleUploadV1Upload(c *gin.Context) {
 
 	tool.DefaultLogger.Infof("[V1 Send] Received upload request: fileId=%s, token=%s, remoteAddr=%s, sessionId=%s", fileId, token, remoteAddr, sessionId)
 
+	// Get file info before processing (needed for both success and failure cases)
+	fileInfo, hasFileInfo := models.LookupFileInfo(sessionId, fileId)
+
 	if ctrl.handler != nil {
 		tool.DefaultLogger.Infof("[V1 Send] Processing upload callback for fileId: %s", fileId)
-		if err := ctrl.handler.OnUpload(sessionId, fileId, token, c.Request.Body, remoteAddr); err != nil {
-			tool.DefaultLogger.Errorf("[V1 Send] Upload callback error: %v", err)
-			errorMsg := err.Error()
+		uploadErr := ctrl.handler.OnUpload(sessionId, fileId, token, c.Request.Body, remoteAddr)
 
+		if uploadErr != nil {
+			tool.DefaultLogger.Errorf("[V1 Send] Upload callback error: %v", uploadErr)
+
+			// Mark file as failed and check if all files are done
+			remaining, isLast, stats := models.MarkFileUploadedAndCheckComplete(sessionId, fileId, false)
+			tool.DefaultLogger.Infof("[V1 Send] File failed: %s, remaining files: %d, isLast: %v", fileId, remaining, isLast)
+
+			// Send notification when all files are processed (even if some failed)
+			if isLast && stats != nil {
+				go func(sid string, stats *models.SessionUploadStats) {
+					tool.DefaultLogger.Infof("[V1 Notify] Sending upload_end notification (all files processed): sessionId=%s, success=%d, failed=%d",
+						sid, stats.SuccessFiles, stats.FailedFiles)
+					if err := notify.SendUploadNotification("upload_end", sid, "", map[string]any{
+						"totalFiles":    stats.TotalFiles,
+						"successFiles":  stats.SuccessFiles,
+						"failedFiles":   stats.FailedFiles,
+						"failedFileIds": stats.FailedFileIds,
+					}); err != nil {
+						tool.DefaultLogger.Errorf("[V1 Notify] Failed to send upload_end notification: %v", err)
+					}
+					models.CleanupSessionStats(sid)
+				}(sessionId, stats)
+			}
+
+			errorMsg := uploadErr.Error()
 			switch errorMsg {
 			case "Invalid token or IP address":
 				c.JSON(http.StatusForbidden, tool.FastReturnError(errorMsg))
@@ -233,26 +264,35 @@ func (ctrl *UploadController) HandleUploadV1Upload(c *gin.Context) {
 				return
 			}
 		} else {
-			// Upload successful, send upload end notification
-			fileInfo, ok := models.LookupFileInfo(sessionId, fileId)
-			if !ok {
+			// Upload successful
+			if !hasFileInfo {
 				tool.DefaultLogger.Errorf("[V1 Send] File info not found for sessionId=%s, fileId=%s", sessionId, fileId)
 				c.JSON(http.StatusInternalServerError, tool.FastReturnError("File info not found"))
 				return
 			}
-			go func(sid, fid string, fileInfo types.FileInfo) {
-				tool.DefaultLogger.Infof("[V1 Notify] Sending upload_end notification: sessionId=%s, fileId=%s, fileName=%s",
-					sid, fid, fileInfo.FileName)
-				if err := notify.SendUploadNotification("upload_end", sid, fid, map[string]any{
-					"fileName": fileInfo.FileName,
-					"size":     fileInfo.Size,
-					"fileType": fileInfo.FileType,
-					"sha256":   fileInfo.SHA256,
-				}); err != nil {
-					tool.DefaultLogger.Errorf("[V1 Notify] Failed to send upload_end notification: %v", err)
-				}
-			}(sessionId, fileId, fileInfo)
 			tool.DefaultLogger.Infof("[V1 Send] Successfully uploaded file: %s (sessionId=%s)", fileInfo.FileName, sessionId)
+
+			// Mark file as uploaded and check if all files are done
+			remaining, isLast, stats := models.MarkFileUploadedAndCheckComplete(sessionId, fileId, true)
+			tool.DefaultLogger.Infof("[V1 Send] File completed: %s, remaining files: %d, isLast: %v", fileInfo.FileName, remaining, isLast)
+
+			// Only send notification when all files are processed
+			if isLast && stats != nil {
+				go func(sid, fid string, fileInfo types.FileInfo, stats *models.SessionUploadStats) {
+					tool.DefaultLogger.Infof("[V1 Notify] Sending upload_end notification (all files processed): sessionId=%s, success=%d, failed=%d",
+						sid, stats.SuccessFiles, stats.FailedFiles)
+					if err := notify.SendUploadNotification("upload_end", sid, fid, map[string]any{
+						"fileName":      fileInfo.FileName,
+						"totalFiles":    stats.TotalFiles,
+						"successFiles":  stats.SuccessFiles,
+						"failedFiles":   stats.FailedFiles,
+						"failedFileIds": stats.FailedFileIds,
+					}); err != nil {
+						tool.DefaultLogger.Errorf("[V1 Notify] Failed to send upload_end notification: %v", err)
+					}
+					models.CleanupSessionStats(sid)
+				}(sessionId, fileId, fileInfo, stats)
+			}
 		}
 	}
 
@@ -282,12 +322,39 @@ func (ctrl *UploadController) HandleUpload(c *gin.Context) {
 	remoteAddr := c.ClientIP()
 	tool.DefaultLogger.Infof("[Upload] Received upload request: sessionId=%s, fileId=%s, token=%s, remoteAddr=%s", sessionId, fileId, token, remoteAddr)
 	tool.DefaultLogger.Debugf("[Upload] Content-Type: %s", c.GetHeader("Content-Type"))
+
+	// Get file info before processing (needed for both success and failure cases)
+	fileInfo, hasFileInfo := models.LookupFileInfo(sessionId, fileId)
+
 	if ctrl.handler != nil {
 		tool.DefaultLogger.Infof("[Upload] Processing upload callback for fileId: %s", fileId)
-		if err := ctrl.handler.OnUpload(sessionId, fileId, token, c.Request.Body, remoteAddr); err != nil {
-			tool.DefaultLogger.Errorf("[Upload] Upload callback error: %v", err)
-			errorMsg := err.Error()
+		uploadErr := ctrl.handler.OnUpload(sessionId, fileId, token, c.Request.Body, remoteAddr)
 
+		if uploadErr != nil {
+			tool.DefaultLogger.Errorf("[Upload] Upload callback error: %v", uploadErr)
+
+			// Mark file as failed and check if all files are done
+			remaining, isLast, stats := models.MarkFileUploadedAndCheckComplete(sessionId, fileId, false)
+			tool.DefaultLogger.Infof("[Upload] File failed: %s, remaining files: %d, isLast: %v", fileId, remaining, isLast)
+
+			// Send notification when all files are processed (even if some failed)
+			if isLast && stats != nil {
+				go func(sid string, stats *models.SessionUploadStats) {
+					tool.DefaultLogger.Infof("[Notify] Sending upload_end notification (all files processed): sessionId=%s, success=%d, failed=%d",
+						sid, stats.SuccessFiles, stats.FailedFiles)
+					if err := notify.SendUploadNotification("upload_end", sid, "", map[string]any{
+						"totalFiles":    stats.TotalFiles,
+						"successFiles":  stats.SuccessFiles,
+						"failedFiles":   stats.FailedFiles,
+						"failedFileIds": stats.FailedFileIds,
+					}); err != nil {
+						tool.DefaultLogger.Errorf("[Notify] Failed to send upload_end notification: %v", err)
+					}
+					models.CleanupSessionStats(sid)
+				}(sessionId, stats)
+			}
+
+			errorMsg := uploadErr.Error()
 			switch errorMsg {
 			case "Invalid token or IP address":
 				c.JSON(http.StatusForbidden, tool.FastReturnError(errorMsg))
@@ -300,29 +367,37 @@ func (ctrl *UploadController) HandleUpload(c *gin.Context) {
 				return
 			}
 		} else {
-			// Upload successful, send upload end notification
-			fileInfo, ok := models.LookupFileInfo(sessionId, fileId)
-			if !ok {
+			// Upload successful
+			if !hasFileInfo {
 				tool.DefaultLogger.Errorf("[Upload] File info not found for sessionId=%s, fileId=%s", sessionId, fileId)
 				c.JSON(http.StatusInternalServerError, tool.FastReturnError("File info not found"))
 				return
 			}
-			// Send notification asynchronously to avoid blocking the response
-			go func(sessionId, fileId string, data types.FileInfo) {
-				tool.DefaultLogger.Infof("[Notify] Sending upload_end notification: sessionId=%s, fileId=%s, fileName=%s",
-					sessionId, fileId, fileInfo.FileName)
-				if err := notify.SendUploadNotification("upload_end", sessionId, fileId, map[string]any{
-					"fileName": fileInfo.FileName,
-					"size":     fileInfo.Size,
-					"fileType": fileInfo.FileType,
-					"sha256":   fileInfo.SHA256,
-				}); err != nil {
-					tool.DefaultLogger.Errorf("[Notify] Failed to send upload_end notification: %v", err)
-				} else {
-					tool.DefaultLogger.Infof("[Notify] Successfully sent upload_end notification for file: %s", fileInfo.FileName)
-				}
-			}(sessionId, fileId, fileInfo)
 			tool.DefaultLogger.Infof("[Upload] Successfully uploaded file: %s (sessionId=%s)", fileInfo.FileName, sessionId)
+
+			// Mark file as uploaded and check if all files are done
+			remaining, isLast, stats := models.MarkFileUploadedAndCheckComplete(sessionId, fileId, true)
+			tool.DefaultLogger.Infof("[Upload] File completed: %s, remaining files: %d, isLast: %v", fileInfo.FileName, remaining, isLast)
+
+			// Only send notification when all files are processed
+			if isLast && stats != nil {
+				go func(sid, fid string, fileInfo types.FileInfo, stats *models.SessionUploadStats) {
+					tool.DefaultLogger.Infof("[Notify] Sending upload_end notification (all files processed): sessionId=%s, success=%d, failed=%d",
+						sid, stats.SuccessFiles, stats.FailedFiles)
+					if err := notify.SendUploadNotification("upload_end", sid, fid, map[string]any{
+						"fileName":      fileInfo.FileName,
+						"totalFiles":    stats.TotalFiles,
+						"successFiles":  stats.SuccessFiles,
+						"failedFiles":   stats.FailedFiles,
+						"failedFileIds": stats.FailedFileIds,
+					}); err != nil {
+						tool.DefaultLogger.Errorf("[Notify] Failed to send upload_end notification: %v", err)
+					} else {
+						tool.DefaultLogger.Infof("[Notify] Successfully sent upload_end notification for session: %s", sid)
+					}
+					models.CleanupSessionStats(sid)
+				}(sessionId, fileId, fileInfo, stats)
+			}
 		}
 	}
 
