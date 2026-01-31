@@ -127,6 +127,7 @@ func SendUploadNotification(eventType, sessionId, fileId string, fileInfo map[st
 
 	// Check if this is plain text content
 	if fileInfo != nil {
+		// First check direct fileType field
 		if fileType, ok := fileInfo["fileType"].(string); ok {
 			isTxt := false
 			if fileName, ok := fileInfo["fileName"].(string); ok {
@@ -135,6 +136,19 @@ func SendUploadNotification(eventType, sessionId, fileId string, fileInfo map[st
 			notification.IsTextOnly = isPlainTextType(fileType) || isTxt
 			if notification.IsTextOnly {
 				tool.DefaultLogger.Infof("[Notify] Detected plain text content: fileType=%s fileName=%v", fileType, fileInfo["fileName"])
+			}
+		} else if files, ok := fileInfo["files"].([]map[string]any); ok && len(files) == 1 {
+			// For single file in batch upload, check the nested file info
+			file := files[0]
+			if fileType, ok := file["fileType"].(string); ok {
+				isTxt := false
+				if fileName, ok := file["fileName"].(string); ok {
+					isTxt = strings.HasSuffix(strings.ToLower(fileName), ".txt")
+				}
+				notification.IsTextOnly = isPlainTextType(fileType) || isTxt
+				if notification.IsTextOnly {
+					tool.DefaultLogger.Infof("[Notify] Detected plain text content from files array: fileType=%s fileName=%v", fileType, file["fileName"])
+				}
 			}
 		}
 	}

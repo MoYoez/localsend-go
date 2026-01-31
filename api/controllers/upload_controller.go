@@ -305,6 +305,7 @@ func (ctrl *UploadController) HandleUploadV1Upload(c *gin.Context) {
 						sid, stats.SuccessFiles, stats.FailedFiles)
 					if err := notify.SendUploadNotification("upload_end", sid, fid, map[string]any{
 						"fileName":      fileInfo.FileName,
+						"fileType":      fileInfo.FileType,
 						"totalFiles":    stats.TotalFiles,
 						"successFiles":  stats.SuccessFiles,
 						"failedFiles":   stats.FailedFiles,
@@ -408,6 +409,7 @@ func (ctrl *UploadController) HandleUpload(c *gin.Context) {
 						sid, stats.SuccessFiles, stats.FailedFiles)
 					if err := notify.SendUploadNotification("upload_end", sid, fid, map[string]any{
 						"fileName":      fileInfo.FileName,
+						"fileType":      fileInfo.FileType,
 						"totalFiles":    stats.TotalFiles,
 						"successFiles":  stats.SuccessFiles,
 						"failedFiles":   stats.FailedFiles,
