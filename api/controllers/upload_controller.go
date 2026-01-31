@@ -82,29 +82,39 @@ func (ctrl *UploadController) HandlePrepareUpload(c *gin.Context) {
 		}
 	}
 
-	// Initialize session stats and send upload start notifications
+	// Initialize session stats and send upload start notification (single notification for all files)
 	if response != nil && response.SessionId != "" {
 		// Initialize upload statistics for this session
 		models.InitSessionStats(response.SessionId, len(request.Files))
 
-		for fileID := range request.Files {
-			fileInfo := request.Files[fileID]
-			// Send notification asynchronously to avoid blocking the response
-			go func(sessionId, fileId string, fileInfo types.FileInfo) {
-				tool.DefaultLogger.Infof("[Notify] Sending upload_start notification: sessionId=%s, fileId=%s, fileName=%s",
-					sessionId, fileId, fileInfo.FileName)
-				if err := notify.SendUploadNotification("upload_start", sessionId, fileId, map[string]any{
-					"fileName": fileInfo.FileName,
-					"size":     fileInfo.Size,
-					"fileType": fileInfo.FileType,
-					"sha256":   fileInfo.SHA256,
-				}); err != nil {
-					tool.DefaultLogger.Errorf("[Notify] Failed to send upload_start notification: %v", err)
-				} else {
-					tool.DefaultLogger.Infof("[Notify] Successfully sent upload_start notification for file: %s", fileInfo.FileName)
-				}
-			}(response.SessionId, fileID, fileInfo)
+		// Collect all file info for single notification
+		filesList := make([]map[string]any, 0, len(request.Files))
+		var totalSize int64
+		for fileID, fileInfo := range request.Files {
+			filesList = append(filesList, map[string]any{
+				"fileId":   fileID,
+				"fileName": fileInfo.FileName,
+				"size":     fileInfo.Size,
+				"fileType": fileInfo.FileType,
+			})
+			totalSize += fileInfo.Size
 		}
+
+		// Send single notification asynchronously
+		go func(sessionId string, files []map[string]any, totalFiles int, totalSize int64) {
+			tool.DefaultLogger.Infof("[Notify] Sending upload_start notification: sessionId=%s, totalFiles=%d",
+				sessionId, totalFiles)
+			if err := notify.SendUploadNotification("upload_start", sessionId, "", map[string]any{
+				"totalFiles": totalFiles,
+				"totalSize":  totalSize,
+				"files":      files,
+			}); err != nil {
+				tool.DefaultLogger.Errorf("[Notify] Failed to send upload_start notification: %v", err)
+			} else {
+				tool.DefaultLogger.Infof("[Notify] Successfully sent upload_start notification for session: %s", sessionId)
+			}
+		}(response.SessionId, filesList, len(request.Files), totalSize)
+
 		tool.DefaultLogger.Infof("[PrepareUpload] Successfully prepared upload session: %s", response.SessionId)
 	}
 
@@ -173,22 +183,34 @@ func (ctrl *UploadController) HandlePrepareV1Upload(c *gin.Context) {
 		// Initialize upload statistics for this session
 		models.InitSessionStats(response.SessionId, len(request.Files))
 
-		// Send upload start notifications for each file
-		for fileID := range request.Files {
-			fileInfo := request.Files[fileID]
-			go func(sessionId, fileId string, fileInfo types.FileInfo) {
-				tool.DefaultLogger.Infof("[V1 Notify] Sending upload_start notification: sessionId=%s, fileId=%s, fileName=%s",
-					sessionId, fileId, fileInfo.FileName)
-				if err := notify.SendUploadNotification("upload_start", sessionId, fileId, map[string]any{
-					"fileName": fileInfo.FileName,
-					"size":     fileInfo.Size,
-					"fileType": fileInfo.FileType,
-					"sha256":   fileInfo.SHA256,
-				}); err != nil {
-					tool.DefaultLogger.Errorf("[V1 Notify] Failed to send upload_start notification: %v", err)
-				}
-			}(response.SessionId, fileID, fileInfo)
+		// Collect all file info for single notification
+		filesList := make([]map[string]any, 0, len(request.Files))
+		var totalSize int64
+		for fileID, fileInfo := range request.Files {
+			filesList = append(filesList, map[string]any{
+				"fileId":   fileID,
+				"fileName": fileInfo.FileName,
+				"size":     fileInfo.Size,
+				"fileType": fileInfo.FileType,
+			})
+			totalSize += fileInfo.Size
 		}
+
+		// Send single notification asynchronously
+		go func(sessionId string, files []map[string]any, totalFiles int, totalSize int64) {
+			tool.DefaultLogger.Infof("[V1 Notify] Sending upload_start notification: sessionId=%s, totalFiles=%d",
+				sessionId, totalFiles)
+			if err := notify.SendUploadNotification("upload_start", sessionId, "", map[string]any{
+				"totalFiles": totalFiles,
+				"totalSize":  totalSize,
+				"files":      files,
+			}); err != nil {
+				tool.DefaultLogger.Errorf("[V1 Notify] Failed to send upload_start notification: %v", err)
+			} else {
+				tool.DefaultLogger.Infof("[V1 Notify] Successfully sent upload_start notification for session: %s", sessionId)
+			}
+		}(response.SessionId, filesList, len(request.Files), totalSize)
+
 		tool.DefaultLogger.Infof("[V1 SendRequest] Successfully prepared session: %s for IP: %s", response.SessionId, remoteAddr)
 	}
 
