@@ -483,6 +483,10 @@ func UserPrepareUpload(c *gin.Context) {
 
 	if err != nil {
 		errorMsg := err.Error()
+		if strings.Contains(errorMsg, "prepare-upload request rejected") {
+			c.JSON(http.StatusForbidden, tool.FastReturnError("Upload request rejected"))
+			return
+		}
 		// Check if it's a PIN-related error
 		errorMsgLower := strings.ToLower(errorMsg)
 		if strings.Contains(errorMsgLower, "pin required") || strings.Contains(errorMsgLower, "invalid pin") {
