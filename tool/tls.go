@@ -64,7 +64,11 @@ func GetOrCreateFingerprintFromConfig(cfg *AppConfig) string {
 // generateRandomFingerprint generates a random 32-character fingerprint (fallback), for http method.
 func generateRandomFingerprint() string {
 	b := make([]byte, 16)
-	cryptorand.Read(b)
+	_, err := cryptorand.Read(b)
+	if err != nil {
+		DefaultLogger.Errorf("Failed to generate random fingerprint: %v", err)
+		return generateRandomFingerprint()
+	}
 	return hex.EncodeToString(b)
 }
 

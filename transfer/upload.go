@@ -59,18 +59,22 @@ func UploadFileWithContext(ctx context.Context, targetAddr *net.UDPAddr, remote 
 		}
 		return fmt.Errorf("failed to send upload request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			tool.DefaultLogger.Errorf("Failed to close response body: %v", err)
+		}
+	}()
 
 	// check status code
 	switch resp.StatusCode {
 	case http.StatusBadRequest:
-		return fmt.Errorf("Missing parameters")
+		return fmt.Errorf("missing parameters")
 	case http.StatusForbidden:
-		return fmt.Errorf("Invalid token or IP address")
+		return fmt.Errorf("invalid token or IP address")
 	case http.StatusConflict:
-		return fmt.Errorf("Blocked by another session")
+		return fmt.Errorf("blocked by another session")
 	case http.StatusInternalServerError:
-		return fmt.Errorf("Unknown receiver error")
+		return fmt.Errorf("unknown receiver error")
 	default:
 		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 			return fmt.Errorf("upload request failed: %s", resp.Status)

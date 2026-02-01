@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"io"
-	"net"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -47,11 +46,6 @@ func (ctrl *RegisterController) HandleRegister(c *gin.Context) {
 		return
 	}
 	tool.DefaultLogger.Infof("[Register] Received register request from %s (fingerprint: %s)", incoming.Alias, incoming.Fingerprint)
-
-	remoteHost, _, splitErr := net.SplitHostPort(c.ClientIP())
-	if splitErr != nil || remoteHost == "" {
-		remoteHost = c.ClientIP()
-	}
 
 	if ctrl.handler != nil {
 		tool.DefaultLogger.Infof("[Register] Processing register callback for device: %s", incoming.Alias)

@@ -88,6 +88,7 @@ func generateRandomFingerprintForConfig() string {
 }
 
 func LoadConfig(path string) (AppConfig, error) {
+	var configChanged bool
 	if path == "" {
 		path = ConfigPath
 	}
@@ -95,7 +96,6 @@ func LoadConfig(path string) (AppConfig, error) {
 	ConfigPath = path
 
 	cfg := defaultConfig()
-	configChanged := false
 
 	info, err := os.Stat(path)
 	if err != nil {
@@ -103,7 +103,6 @@ func LoadConfig(path string) (AppConfig, error) {
 			// Config file doesn't exist, create with default values
 			// Default protocol is https, so generate fingerprint from TLS certificate
 			cfg.Fingerprint = GetOrCreateFingerprintFromConfig(&cfg)
-			configChanged = true
 			if writeErr := writeDefaultConfig(path, cfg); writeErr != nil {
 				return cfg, fmt.Errorf("config file not found, and failed to generate default config: %v", writeErr)
 			}

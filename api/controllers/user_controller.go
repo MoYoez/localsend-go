@@ -238,8 +238,8 @@ func UserConfirmRecv(c *gin.Context) {
 // Receives file metadata, sends prepare upload request to target device, returns sessionId and tokens
 func UserPrepareUpload(c *gin.Context) {
 	var request UserPrepareUploadRequest
-	var pin string
-	pin = c.Query("pin")
+
+	pin := c.Query("pin")
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, tool.FastReturnError("Invalid request body: "+err.Error()))
 		return
@@ -342,7 +342,7 @@ func UserPrepareUpload(c *gin.Context) {
 			DeviceType:  selfDevice.DeviceType,
 			Fingerprint: selfDevice.Fingerprint,
 			Port:        selfDevice.Port,
-			Protocol:    targetItem.VersionMessage.Protocol, // Use target device protocol
+			Protocol:    targetItem.Protocol, // Use target device protocol
 			Download:    selfDevice.Download,
 		},
 		Files: filesMap,
@@ -351,7 +351,7 @@ func UserPrepareUpload(c *gin.Context) {
 	// Call LocalSend prepare upload endpoint
 	targetAddr := &net.UDPAddr{
 		IP:   net.ParseIP(targetItem.Ipaddress).To4(),
-		Port: targetItem.VersionMessage.Port,
+		Port: targetItem.Port,
 	}
 
 	prepareResponse, err := transfer.ReadyToUploadTo(
@@ -480,7 +480,11 @@ func UserUpload(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, tool.FastReturnError("Failed to read file data: "+err.Error()))
 			return
 		}
-		defer c.Request.Body.Close()
+		defer func() {
+			if err := c.Request.Body.Close(); err != nil {
+				tool.DefaultLogger.Errorf("Failed to close request body: %v", err)
+			}
+		}()
 		fileData = data
 	}
 
@@ -522,7 +526,7 @@ func UserUpload(c *gin.Context) {
 	// Call LocalSend upload endpoint
 	targetAddr := &net.UDPAddr{
 		IP:   net.ParseIP(sessionInfo.Target.Ipaddress).To4(),
-		Port: sessionInfo.Target.VersionMessage.Port,
+		Port: sessionInfo.Target.Port,
 	}
 
 	tool.DefaultLogger.Infof("Uploading file to %s:%d (sessionId=%s, fileId=%s)",
@@ -659,7 +663,7 @@ func UserUploadBatch(c *gin.Context) {
 	// Get target address for upload
 	targetAddr := &net.UDPAddr{
 		IP:   net.ParseIP(sessionInfo.Target.Ipaddress).To4(),
-		Port: sessionInfo.Target.VersionMessage.Port,
+		Port: sessionInfo.Target.Port,
 	}
 
 	tool.DefaultLogger.Infof("[UploadBatch] Starting batch upload: sessionId=%s, totalFiles=%d",
@@ -832,7 +836,7 @@ func UserCancelUpload(c *gin.Context) {
 	// Also notify the target device about the cancellation
 	targetAddr := &net.UDPAddr{
 		IP:   net.ParseIP(sessionInfo.Target.Ipaddress).To4(),
-		Port: sessionInfo.Target.VersionMessage.Port,
+		Port: sessionInfo.Target.Port,
 	}
 
 	// Send cancel request to target device

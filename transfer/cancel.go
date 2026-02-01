@@ -35,11 +35,15 @@ func CancelSession(targetAddr *net.UDPAddr, remote *types.VersionMessage, sessio
 	if err != nil {
 		return fmt.Errorf("failed to send cancel request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			tool.DefaultLogger.Errorf("Failed to close response body: %v", err)
+		}
+	}()
 
 	// check status code
 	if resp.StatusCode == http.StatusBadRequest {
-		return fmt.Errorf("Missing parameters")
+		return fmt.Errorf("missing parameters")
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return fmt.Errorf("cancel request failed: %s", resp.Status)

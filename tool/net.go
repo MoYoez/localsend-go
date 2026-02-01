@@ -135,7 +135,11 @@ func QuickTCPProbe(ip string, port int, timeout time.Duration) bool {
 		return false
 	}
 	DefaultLogger.Debugf("quickTCPProbe: dial %s success", addr)
-	conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			DefaultLogger.Errorf("Failed to close TCP connection: %v", err)
+		}
+	}()
 	return true
 }
 

@@ -147,9 +147,16 @@ func listenOnInterface(iface *net.Interface, addr *net.UDPAddr, self *types.Vers
 		tool.DefaultLogger.Errorf("Failed to listen on multicast UDP address for interface %s: %v", interfaceName, err)
 		return
 	}
-	defer c.Close()
-	c.SetReadBuffer(256 * 1024)
-	buf := make([]byte, 1024*64)
+	defer func() {
+		if err := c.Close(); err != nil {
+			tool.DefaultLogger.Errorf("Failed to close multicast UDP connection: %v", err)
+		}
+	}()
+	err = c.SetReadBuffer(1024 * 8)
+	if err != nil {
+		tool.DefaultLogger.Errorf("Failed to set read buffer: %v", err)
+	}
+	buf := make([]byte, 1024*8)
 	tool.DefaultLogger.Infof("Listening on multicast UDP address: %s (interface: %s)", addr.String(), interfaceName)
 
 	for {
@@ -233,10 +240,11 @@ func ListenMulticastUsingUDP(self *types.VersionMessage) {
 // Supports restart via RestartAutoScan() which resets the timeout timer.
 // SendMulticastUsingUDP sends a multicast message to the multicast address to announce the device.
 // https://github.com/localsend/protocol/blob/main/README.md#31-multicast-udp-default
-func SendMulticastUsingUDPWithTimeout(message *types.VersionMessage, timeout int) error {
+func SendMulticastUsingUDPWithTimeout(message *types.VersionMessage, timeout int) {
 	addr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:%d", multcastAddress, multcastPort))
 	if err != nil {
-		return fmt.Errorf("failed to resolve UDP address: %v", err)
+		tool.DefaultLogger.Errorf("Failed to resolve UDP address: %v", err)
+		return
 	}
 
 	// Register UDP scan as running and get restart channel
@@ -273,11 +281,14 @@ func SendMulticastUsingUDPWithTimeout(message *types.VersionMessage, timeout int
 		return nil
 	}
 	if err := dialConn(); err != nil {
-		return fmt.Errorf("failed to dial UDP address: %v", err)
+		tool.DefaultLogger.Errorf("Failed to dial UDP address: %v", err)
+		return
 	}
 	defer func() {
 		if c != nil {
-			c.Close()
+			if err := c.Close(); err != nil {
+				tool.DefaultLogger.Errorf("Failed to close multicast UDP connection: %v", err)
+			}
 		}
 	}()
 
@@ -342,7 +353,7 @@ func SendMulticastUsingUDPWithTimeout(message *types.VersionMessage, timeout int
 		case <-timeoutCh:
 			elapsed := time.Since(startTime)
 			tool.DefaultLogger.Infof("UDP multicast sending stopped after timeout (%v elapsed)", elapsed.Round(time.Second))
-			return nil
+			return
 		case <-restartCh:
 			// Restart signal received, reset timeout and continue sending
 			resetTimeout()
@@ -357,11 +368,13 @@ func SendMulticastUsingUDPWithTimeout(message *types.VersionMessage, timeout int
 // SendMulticastOnce sends a single multicast message to the multicast address.
 func SendMulticastOnce(message *types.VersionMessage) error {
 	if message == nil {
-		return fmt.Errorf("missing message")
+		tool.DefaultLogger.Errorf("Missing message")
+		return nil
 	}
 	addr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:%d", multcastAddress, multcastPort))
 	if err != nil {
-		return fmt.Errorf("failed to resolve UDP address: %v", err)
+		tool.DefaultLogger.Errorf("Failed to resolve UDP address: %v", err)
+		return nil
 	}
 	c, err := net.DialUDP("udp4", nil, addr)
 	if err != nil {
@@ -370,7 +383,11 @@ func SendMulticastOnce(message *types.VersionMessage) error {
 		}
 		return fmt.Errorf("failed to dial UDP address: %v", err)
 	}
-	defer c.Close()
+	defer func() {
+		if err := c.Close(); err != nil {
+			tool.DefaultLogger.Errorf("Failed to close multicast UDP connection: %v", err)
+		}
+	}()
 	payload, err := sonic.Marshal(message)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %v", err)
@@ -442,7 +459,11 @@ func CallbackMulticastMessageUsingUDP(message *types.VersionMessage) error {
 	if err != nil {
 		return fmt.Errorf("failed to dial UDP address: %v", err)
 	}
-	defer c.Close()
+	defer func() {
+		if err := c.Close(); err != nil {
+			tool.DefaultLogger.Errorf("Failed to close multicast UDP connection: %v", err)
+		}
+	}()
 	payload, err := sonic.Marshal(&response)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %v", err)
@@ -673,7 +694,11 @@ func ListenMulticastUsingHTTPWithTimeout(self *types.VersionMessageHTTP, timeout
 						return
 					}
 				}
-				defer resp.Body.Close()
+				defer func() {
+					if err := resp.Body.Close(); err != nil {
+						tool.DefaultLogger.Errorf("Failed to close response body: %v", err)
+					}
+				}()
 				if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 					tool.DefaultLogger.Debugf("ListenMulticastUsingHTTP: POST to %s failed with status: %s", url, resp.Status)
 					return
@@ -748,7 +773,11 @@ func sendRegisterRequest(url string, payload string) error {
 	if err != nil {
 		return fmt.Errorf("failed to send register request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			tool.DefaultLogger.Errorf("Failed to close response body: %v", err)
+		}
+	}()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return fmt.Errorf("register request failed: %s", resp.Status)
 	}
@@ -900,7 +929,11 @@ func ScanOnceHTTP(self *types.VersionMessageHTTP) error {
 					return
 				}
 			}
-			defer resp.Body.Close()
+			defer func() {
+				if err := resp.Body.Close(); err != nil {
+					tool.DefaultLogger.Errorf("Failed to close response body: %v", err)
+				}
+			}()
 			if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 				return
 			}

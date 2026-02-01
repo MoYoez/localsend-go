@@ -63,10 +63,17 @@ func SendNotification(notification *Notification, socketPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to Unix socket %s: %v", socketPath, err)
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			tool.DefaultLogger.Errorf("Failed to close Unix socket connection: %v", err)
+		}
+	}()
 
 	// Set write deadline
-	conn.SetWriteDeadline(time.Now().Add(UnixSocketTimeout))
+	err = conn.SetWriteDeadline(time.Now().Add(UnixSocketTimeout))
+	if err != nil {
+		tool.DefaultLogger.Errorf("Failed to set write deadline: %v", err)
+	}
 
 	// Send data
 	tool.DefaultLogger.Debugf("Sending notification to Unix socket: %s", tool.BytesToString(payload))
@@ -76,7 +83,10 @@ func SendNotification(notification *Notification, socketPath string) error {
 	}
 
 	// Set read deadline
-	conn.SetReadDeadline(time.Now().Add(UnixSocketTimeout))
+	err = conn.SetReadDeadline(time.Now().Add(UnixSocketTimeout))
+	if err != nil {
+		tool.DefaultLogger.Errorf("Failed to set read deadline: %v", err)
+	}
 
 	// Read response
 	buf := make([]byte, 4096)

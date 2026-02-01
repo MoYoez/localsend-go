@@ -136,9 +136,9 @@ func NewDefaultHandler() *Handler {
 				if err := notify.SendNotification(notification, ""); err != nil {
 					tool.DefaultLogger.Errorf("[Notify] Failed to send pin_required notification: %v", err)
 				}
-				return nil, fmt.Errorf("PIN required")
+				return nil, fmt.Errorf("pin required")
 			case pinSetted != "" && pin != pinSetted:
-				return nil, fmt.Errorf("Invalid PIN")
+				return nil, fmt.Errorf("invalid PIN")
 			}
 
 			programConfig := tool.GetProgramConfigStatus()
@@ -241,13 +241,17 @@ func NewDefaultHandler() *Handler {
 				fileName = fileId
 			}
 			fileName = filepath.Base(fileName)
-			targetPath := filepath.Join(models.DefaultUploadFolder, sessionId, fmt.Sprintf("%s", fileName))
+			targetPath := filepath.Join(models.DefaultUploadFolder, sessionId, fileName)
 
 			file, err := os.Create(targetPath)
 			if err != nil {
 				return fmt.Errorf("create file failed: %w", err)
 			}
-			defer file.Close()
+			defer func() {
+				if err := file.Close(); err != nil {
+					tool.DefaultLogger.Errorf("Failed to close file: %v", err)
+				}
+			}()
 
 			hasher := sha256.New()
 			writer := io.MultiWriter(file, hasher)
@@ -258,8 +262,13 @@ func NewDefaultHandler() *Handler {
 				// Check if it was cancelled
 				if ctx.Err() != nil {
 					// Clean up the partial file
-					file.Close()
-					os.Remove(targetPath)
+					if err := file.Close(); err != nil {
+						tool.DefaultLogger.Errorf("Failed to close file: %v", err)
+					}
+					err := os.Remove(targetPath)
+					if err != nil {
+						tool.DefaultLogger.Errorf("Failed to remove partial file: %v", err)
+					}
 					return fmt.Errorf("upload cancelled")
 				}
 				return fmt.Errorf("write file failed: %w", err)
@@ -267,8 +276,13 @@ func NewDefaultHandler() *Handler {
 
 			// Check if cancelled after copy
 			if ctx.Err() != nil {
-				file.Close()
-				os.Remove(targetPath)
+				if err := file.Close(); err != nil {
+					tool.DefaultLogger.Errorf("Failed to close file: %v", err)
+				}
+				err := os.Remove(targetPath)
+				if err != nil {
+					tool.DefaultLogger.Errorf("Failed to remove partial file: %v", err)
+				}
 				return fmt.Errorf("upload cancelled")
 			}
 

@@ -52,7 +52,11 @@ func ReadyToUploadTo(targetAddr *net.UDPAddr, remote *types.VersionMessage, requ
 	if err != nil {
 		return nil, fmt.Errorf("failed to send prepare-upload request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			tool.DefaultLogger.Errorf("Failed to close response body: %v", err)
+		}
+	}()
 
 	body, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
@@ -96,17 +100,17 @@ func ReadyToUploadTo(targetAddr *net.UDPAddr, remote *types.VersionMessage, requ
 					errorResponse.Error == "pin required" || errorResponse.Error == "invalid pin" {
 					// Standardize error message
 					if errorResponse.Error == "pin required" {
-						return nil, fmt.Errorf("PIN required")
+						return nil, fmt.Errorf("pin required")
 					}
 					if errorResponse.Error == "invalid pin" {
-						return nil, fmt.Errorf("Invalid PIN")
+						return nil, fmt.Errorf("invalid PIN")
 					}
 					return nil, fmt.Errorf("%s", errorResponse.Error)
 				}
 			}
 		}
 		// Default error message if parsing fails
-		return nil, fmt.Errorf("PIN required / Invalid PIN")
+		return nil, fmt.Errorf("pin required / invalid PIN")
 	case StatusRejected:
 		return nil, fmt.Errorf("prepare-upload request rejected")
 	case StatusBlockedByOtherSession:

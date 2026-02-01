@@ -106,7 +106,11 @@ func GetFileInfoFromPath(filePath string, calculateSHA bool) (string, int64, str
 		if err != nil {
 			return fileName, fileSize, fileType, "", fmt.Errorf("failed to open file for hashing: %v", err)
 		}
-		defer file.Close()
+		defer func() {
+			if err := file.Close(); err != nil {
+				DefaultLogger.Errorf("Failed to close file: %v", err)
+			}
+		}()
 
 		hasher := sha256.New()
 		if _, err := io.Copy(hasher, file); err != nil {
@@ -189,7 +193,11 @@ func ProcessFolderForUpload(folderPath string, calculateSHA bool) (map[string]*t
 				DefaultLogger.Warnf("Skipping file %s: failed to open for hashing: %v", path, err)
 				return nil
 			}
-			defer file.Close()
+			defer func() {
+				if err := file.Close(); err != nil {
+					DefaultLogger.Errorf("Failed to close file: %v", err)
+				}
+			}()
 
 			hasher := sha256.New()
 			if _, err := io.Copy(hasher, file); err != nil {
@@ -265,7 +273,11 @@ func ProcessPathInput(path string, calculateSHA bool) (map[string]*types.FileInp
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to open file for hashing: %v", err)
 			}
-			defer file.Close()
+			defer func() {
+				if err := file.Close(); err != nil {
+					DefaultLogger.Errorf("Failed to close file: %v", err)
+				}
+			}()
 
 			hasher := sha256.New()
 			if _, err := io.Copy(hasher, file); err != nil {
