@@ -135,19 +135,14 @@ func LoadConfig(path string) (AppConfig, error) {
 			configChanged = true
 		}
 	} else {
-		// HTTP mode: use random fingerprint if not set, clear certificate data
+		// HTTP mode: use random fingerprint if not set
+		// Keep certificate data for seamless switch back to HTTPS
 		if cfg.Fingerprint == "" {
 			cfg.Fingerprint = generateRandomFingerprintForConfig()
 			DefaultLogger.Infof("HTTP mode: generated random fingerprint")
 			configChanged = true
 		}
-		// Clear certificate data in HTTP mode
-		if cfg.CertPEM != "" || cfg.KeyPEM != "" {
-			cfg.CertPEM = ""
-			cfg.KeyPEM = ""
-			configChanged = true
-		}
-		DefaultLogger.Debugf("HTTP mode: no TLS certificate needed")
+		DefaultLogger.Debugf("HTTP mode: no TLS certificate needed (certificate preserved for HTTPS)")
 	}
 
 	// Save config if changed

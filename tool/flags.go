@@ -39,7 +39,7 @@ func SetFlags() Config {
 	flag.StringVar(&cfg.UseAlias, "useAlias", "", "specify alias for the device")
 	flag.BoolVar(&cfg.UseMixedScan, "useMixedScan", false, "if true, use mixed scan mode, both UDP and HTTP.")
 	flag.BoolVar(&cfg.SkipNotify, "skipNotify", false, "if true, skip notify mode.")
-	flag.BoolVar(&cfg.UseHttps, "useHttps", true, "if true, use https (encrypted); if false, use http (unencrypted). Alias for protocol config.")
+	flag.BoolVar(&cfg.UseHttps, "useHttps", false, "if true, use https (encrypted); if false, use http (unencrypted). Alias for protocol config.")
 	flag.IntVar(&cfg.ScanTimeout, "scanTimeout", 500, "scan timeout in seconds, default 500. After timeout, auto scan will stop. Set to 0 to disable timeout.")
 	flag.BoolVar(&cfg.UseDownload, "useDownload", false, "if true, enable download API (prepare-download, download, download page)")
 	flag.StringVar(&cfg.UseWebOutPath, "webOutPath", "./web/out", "path to Next.js static export output for download page")

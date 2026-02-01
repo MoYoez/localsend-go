@@ -76,6 +76,7 @@ func (s *Server) setupRoutes() *gin.Engine {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	engine := gin.New()
+	engine.Use(middlewares.AllowAllCORS())
 	engine.Use(gin.Recovery())
 
 	// Initialize controllers
@@ -93,7 +94,7 @@ func (s *Server) setupRoutes() *gin.Engine {
 		v2.POST("/cancel", cancelCtrl.HandleCancel)
 		// Download API (LocalSend protocol Section 5)
 		if selfDevice := models.GetSelfDevice(); selfDevice != nil && selfDevice.Download {
-			v2.POST("/prepare-download", controllers.HandlePrepareDownload)
+			v2.GET("/prepare-download", controllers.HandlePrepareDownload)
 			v2.GET("/download", controllers.HandleDownload)
 		}
 	}

@@ -33,11 +33,10 @@ func main() {
 	if cfg.UseAlias != "" {
 		appCfg.Alias = cfg.UseAlias
 	}
-	if cfg.UseHttps {
-		appCfg.Protocol = "https"
-	} else {
+	if !cfg.UseHttps {
 		appCfg.Protocol = "http"
 	}
+
 	if cfg.SkipNotify {
 		notify.UseNotify = false
 	}

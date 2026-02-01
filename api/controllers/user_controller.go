@@ -1200,7 +1200,7 @@ func UserCreateShareSession(c *gin.Context) {
 		}
 	}
 
-	sessionId := tool.GenerateRandomUUID()
+	sessionId := tool.GenerateShortSessionID()
 	session := &models.ShareSession{
 		SessionId:  sessionId,
 		Files:      files,

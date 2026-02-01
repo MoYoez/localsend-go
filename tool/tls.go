@@ -89,8 +89,6 @@ func GetOrCreateTLSCertFromConfig(cfg *AppConfig) (certDER []byte, keyDER []byte
 		DefaultLogger.Warnf("Certificate in config is invalid or expired: %v, regenerating...", err)
 	}
 
-	DefaultLogger.Infof("No existing TLS certificate in config, generating new one...")
-
 	// Generate new certificate
 	certDER, keyDER, err = generateTLSCert()
 	if err != nil {
