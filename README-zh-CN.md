@@ -57,8 +57,7 @@
 
 ## TODO
 
-1. bug 修复
-2. 网页支持，但可能会咕咕咕咕咕咕咕
+None Currently
 
 ## 已知 BUG
 

@@ -362,7 +362,7 @@ func UserPrepareUpload(c *gin.Context) {
 
 		// Optionally cache this device info for future use
 		share.SetUserScanCurrent(deviceInfo.Fingerprint, targetItem)
-		ok = true
+
 	} else {
 		// Normal mode: validate target device exists in scan list
 		targetItem, ok = share.GetUserScanCurrent(request.TargetTo)
