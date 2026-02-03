@@ -108,15 +108,46 @@ func getNetworkInterfaces() ([]*net.Interface, error) {
 }
 
 // getCachedNetworkIPs returns cached network IPs or generates new ones if cache is invalid.
-// It detects network interface changes by comparing the current interface addresses hash.
+// It strictly follows useReferNetworkInterface: when a specific interface is set, only IPs from that interface's network(s) are returned.
+// Cache key includes interface config to invalidate on config change.
 func getCachedNetworkIPs() ([]string, error) {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return nil, err
+	var addrs []net.Addr
+	if listenAllInterfaces {
+		var err error
+		addrs, err = net.InterfaceAddrs()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		interfaces, err := getNetworkInterfaces()
+		if err != nil {
+			return nil, err
+		}
+		for _, iface := range interfaces {
+			if iface == nil {
+				// system default: fall back to InterfaceAddrs
+				allAddrs, err := net.InterfaceAddrs()
+				if err != nil {
+					return nil, err
+				}
+				addrs = append(addrs, allAddrs...)
+				continue
+			}
+			ifaceAddrs, err := iface.Addrs()
+			if err != nil {
+				continue
+			}
+			addrs = append(addrs, ifaceAddrs...)
+		}
 	}
 
-	// Build a cache key based on current interface addresses
+	// Build a cache key: include interface config + addresses (for change detection)
 	var keyBuilder strings.Builder
+	keyBuilder.WriteString("li:")
+	keyBuilder.WriteString(fmt.Sprint(listenAllInterfaces))
+	keyBuilder.WriteString(";rif:")
+	keyBuilder.WriteString(referNetworkInterface)
+	keyBuilder.WriteString(";")
 	for _, addr := range addrs {
 		ipnet, ok := addr.(*net.IPNet)
 		if !ok || ipnet.IP.IsLoopback() || ipnet.IP.To4() == nil {
@@ -159,4 +190,31 @@ func getCachedNetworkIPs() ([]string, error) {
 	result := make([]string, len(targets))
 	copy(result, targets)
 	return result, nil
+}
+
+// GetPreferredOutgoingBindAddr returns the local address to bind outgoing HTTP connections to.
+// When useReferNetworkInterface specifies a concrete interface (not "*"), returns the first
+// valid IPv4 address on that interface so HTTP requests use that interface.
+// Returns (nil, nil) when listenAllInterfaces is true or referNetworkInterface is empty.
+// Returns an error when the specified interface has no valid IPv4 address.
+func GetPreferredOutgoingBindAddr() (*net.TCPAddr, error) {
+	if listenAllInterfaces || referNetworkInterface == "" {
+		return nil, nil
+	}
+	iface, err := net.InterfaceByName(referNetworkInterface)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get network interface %s: %w", referNetworkInterface, err)
+	}
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get addresses for interface %s: %w", referNetworkInterface, err)
+	}
+	for _, addr := range addrs {
+		ipnet, ok := addr.(*net.IPNet)
+		if !ok || ipnet.IP.IsLoopback() || ipnet.IP.To4() == nil {
+			continue
+		}
+		return &net.TCPAddr{IP: ipnet.IP, Port: 0}, nil
+	}
+	return nil, fmt.Errorf("interface %s has no valid IPv4 address", referNetworkInterface)
 }

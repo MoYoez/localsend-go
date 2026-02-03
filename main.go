@@ -40,6 +40,12 @@ func main() {
 	boardcast.SetMultcastAddress(FlagConfig.UseMultcastAddress)
 	boardcast.SetMultcastPort(FlagConfig.UseMultcastPort)
 	boardcast.SetReferNetworkInterface(FlagConfig.UseReferNetworkInterface)
+	if bindAddr, err := boardcast.GetPreferredOutgoingBindAddr(); err != nil {
+		tool.DefaultLogger.Warnf("GetPreferredOutgoingBindAddr: %v, HTTP clients will use default interface", err)
+		tool.InitHTTPClients(nil)
+	} else {
+		tool.InitHTTPClients(bindAddr)
+	}
 	api.SetDefaultUploadFolder(FlagConfig.UseDefaultUploadFolder)
 	api.SetDoNotMakeSessionFolder(FlagConfig.DoNotMakeSessionFolder)
 	tool.SetProgramConfigStatus(FlagConfig.UsePin, FlagConfig.UseAutoSave, FlagConfig.UseAutoSaveFromFavorites)
