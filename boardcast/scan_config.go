@@ -70,13 +70,15 @@ func ScanNow() error {
 
 	tool.DefaultLogger.Info("Performing manual scan...")
 
-	if IsAutoScanRunning() {
-		tool.DefaultLogger.Debug("Auto scan is running, sending restart signal")
-		RestartAutoScan()
-	} else {
-		tool.DefaultLogger.Info("Auto scan has stopped, restarting auto scan loops")
-		restartAutoScanLoops(config)
-	}
+	go func() {
+		if IsAutoScanRunning() {
+			tool.DefaultLogger.Debug("Auto scan is running, sending restart signal")
+			RestartAutoScan()
+		} else {
+			tool.DefaultLogger.Info("Auto scan has stopped, restarting auto scan loops")
+			restartAutoScanLoops(config)
+		}
+	}()
 
 	switch config.Mode {
 	case types.ScanModeUDP:
