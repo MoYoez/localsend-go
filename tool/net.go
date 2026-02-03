@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/moyoez/localsend-base-protocol-golang/types"
+	"github.com/moyoez/localsend-go/types"
 )
 
 // UDP4 unsupport multicast

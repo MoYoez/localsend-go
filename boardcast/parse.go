@@ -5,7 +5,7 @@ import (
 	"net"
 
 	"github.com/bytedance/sonic"
-	"github.com/moyoez/localsend-base-protocol-golang/types"
+	"github.com/moyoez/localsend-go/types"
 )
 
 // CastToUDPAddr casts the address to a UDP address.

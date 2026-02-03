@@ -5,8 +5,8 @@ import (
 	"time"
 
 	ttlworker "github.com/FloatTech/ttl"
-	"github.com/moyoez/localsend-base-protocol-golang/tool"
-	"github.com/moyoez/localsend-base-protocol-golang/types"
+	"github.com/moyoez/localsend-go/tool"
+	"github.com/moyoez/localsend-go/types"
 )
 
 const (
@@ -60,7 +60,6 @@ func MarkDownloadConfirmed(sessionId string) {
 	defer shareSessionMu.Unlock()
 	confirmedDownloadSess.Set(sessionId, true)
 }
-
 
 // SetConfirmDownloadChannel sets the channel for confirm-download callback
 func SetConfirmDownloadChannel(sessionId string, ch chan types.ConfirmResult) {

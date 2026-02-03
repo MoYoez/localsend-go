@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	"github.com/moyoez/localsend-base-protocol-golang/share"
-	"github.com/moyoez/localsend-base-protocol-golang/tool"
-	"github.com/moyoez/localsend-base-protocol-golang/types"
+	"github.com/moyoez/localsend-go/share"
+	"github.com/moyoez/localsend-go/tool"
+	"github.com/moyoez/localsend-go/types"
 )
 
 // scanOneIPHTTP performs TCP probe, POST register (https then http on EOF), parses response and stores device via share.SetUserScanCurrent.

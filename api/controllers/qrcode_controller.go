@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/moyoez/localsend-base-protocol-golang/tool"
+	"github.com/moyoez/localsend-go/tool"
 	"github.com/skip2/go-qrcode"
 )
 

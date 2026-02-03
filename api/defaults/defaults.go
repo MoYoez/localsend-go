@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/moyoez/localsend-base-protocol-golang/api/models"
-	"github.com/moyoez/localsend-base-protocol-golang/notify"
-	"github.com/moyoez/localsend-base-protocol-golang/tool"
-	"github.com/moyoez/localsend-base-protocol-golang/types"
+	"github.com/moyoez/localsend-go/api/models"
+	"github.com/moyoez/localsend-go/notify"
+	"github.com/moyoez/localsend-go/tool"
+	"github.com/moyoez/localsend-go/types"
 )
 
 // DefaultOnRegister is the default callback for device register.

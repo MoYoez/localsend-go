@@ -1,4 +1,4 @@
-module github.com/moyoez/localsend-base-protocol-golang
+module github.com/moyoez/localsend-go
 
 go 1.24.4
 

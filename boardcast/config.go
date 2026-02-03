@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/moyoez/localsend-base-protocol-golang/tool"
-	"github.com/moyoez/localsend-base-protocol-golang/types"
+	"github.com/moyoez/localsend-go/tool"
+	"github.com/moyoez/localsend-go/types"
 )
 
 // refer to https://github.com/localsend/protocol/blob/main/README.md#1-defaults

@@ -4,9 +4,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/moyoez/localsend-base-protocol-golang/api/defaults"
-	"github.com/moyoez/localsend-base-protocol-golang/api/models"
-	"github.com/moyoez/localsend-base-protocol-golang/tool"
+	"github.com/moyoez/localsend-go/api/defaults"
+	"github.com/moyoez/localsend-go/api/models"
+	"github.com/moyoez/localsend-go/tool"
 )
 
 type CancelController struct{}

@@ -2,11 +2,11 @@ package main
 
 import (
 	"github.com/charmbracelet/log"
-	"github.com/moyoez/localsend-base-protocol-golang/api"
-	"github.com/moyoez/localsend-base-protocol-golang/boardcast"
-	"github.com/moyoez/localsend-base-protocol-golang/notify"
-	"github.com/moyoez/localsend-base-protocol-golang/tool"
-	"github.com/moyoez/localsend-base-protocol-golang/types"
+	"github.com/moyoez/localsend-go/api"
+	"github.com/moyoez/localsend-go/boardcast"
+	"github.com/moyoez/localsend-go/notify"
+	"github.com/moyoez/localsend-go/tool"
+	"github.com/moyoez/localsend-go/types"
 )
 
 func main() {

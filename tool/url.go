@@ -5,7 +5,7 @@ import (
 	"net"
 	"net/url"
 
-	"github.com/moyoez/localsend-base-protocol-golang/types"
+	"github.com/moyoez/localsend-go/types"
 )
 
 // BuildRegisterURL builds the /register callback URL

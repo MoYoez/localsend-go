@@ -1,7 +1,7 @@
 package tool
 
 import (
-	"github.com/moyoez/localsend-base-protocol-golang/types"
+	"github.com/moyoez/localsend-go/types"
 )
 
 func BuildVersionMessages(appCfg *types.AppConfig, Flags types.Config) (*types.VersionMessage, *types.VersionMessageHTTP) {

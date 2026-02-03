@@ -7,9 +7,9 @@ import (
 
 	ttlworker "github.com/FloatTech/ttl"
 
-	"github.com/moyoez/localsend-base-protocol-golang/notify"
-	"github.com/moyoez/localsend-base-protocol-golang/tool"
-	"github.com/moyoez/localsend-base-protocol-golang/types"
+	"github.com/moyoez/localsend-go/notify"
+	"github.com/moyoez/localsend-go/tool"
+	"github.com/moyoez/localsend-go/types"
 )
 
 const (

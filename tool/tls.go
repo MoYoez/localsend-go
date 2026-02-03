@@ -14,7 +14,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/moyoez/localsend-base-protocol-golang/types"
+	"github.com/moyoez/localsend-go/types"
 )
 
 var (

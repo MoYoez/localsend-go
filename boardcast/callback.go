@@ -6,8 +6,8 @@ import (
 
 	"github.com/bytedance/sonic"
 
-	"github.com/moyoez/localsend-base-protocol-golang/tool"
-	"github.com/moyoez/localsend-base-protocol-golang/types"
+	"github.com/moyoez/localsend-go/tool"
+	"github.com/moyoez/localsend-go/types"
 )
 
 // CallbackMulticastMessageUsingTCP calls the /register callback using HTTP/TCP.

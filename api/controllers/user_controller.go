@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/moyoez/localsend-base-protocol-golang/share"
-	"github.com/moyoez/localsend-base-protocol-golang/tool"
+	"github.com/moyoez/localsend-go/share"
+	"github.com/moyoez/localsend-go/tool"
 )
 
 // UserGetImage returns an image file (Steam screenshot path validation).

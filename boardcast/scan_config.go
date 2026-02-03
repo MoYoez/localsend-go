@@ -3,8 +3,8 @@ package boardcast
 import (
 	"fmt"
 
-	"github.com/moyoez/localsend-base-protocol-golang/tool"
-	"github.com/moyoez/localsend-base-protocol-golang/types"
+	"github.com/moyoez/localsend-go/tool"
+	"github.com/moyoez/localsend-go/types"
 )
 
 // SetScanConfig sets the current scan configuration for scan-now API

@@ -3,7 +3,7 @@ package tool
 import (
 	"flag"
 
-	"github.com/moyoez/localsend-base-protocol-golang/types"
+	"github.com/moyoez/localsend-go/types"
 )
 
 // SetFlags parses CLI flags and returns the override config.

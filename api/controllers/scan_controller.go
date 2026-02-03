@@ -4,10 +4,10 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/moyoez/localsend-base-protocol-golang/boardcast"
-	"github.com/moyoez/localsend-base-protocol-golang/share"
-	"github.com/moyoez/localsend-base-protocol-golang/tool"
-	"github.com/moyoez/localsend-base-protocol-golang/types"
+	"github.com/moyoez/localsend-go/boardcast"
+	"github.com/moyoez/localsend-go/share"
+	"github.com/moyoez/localsend-go/tool"
+	"github.com/moyoez/localsend-go/types"
 )
 
 // UserGetNetworkInfo returns local network interface information with IP addresses and segment numbers.

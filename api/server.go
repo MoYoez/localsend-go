@@ -11,11 +11,11 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/gin-gonic/gin"
-	"github.com/moyoez/localsend-base-protocol-golang/api/controllers"
-	"github.com/moyoez/localsend-base-protocol-golang/api/middlewares"
-	"github.com/moyoez/localsend-base-protocol-golang/api/models"
-	"github.com/moyoez/localsend-base-protocol-golang/tool"
-	"github.com/moyoez/localsend-base-protocol-golang/types"
+	"github.com/moyoez/localsend-go/api/controllers"
+	"github.com/moyoez/localsend-go/api/middlewares"
+	"github.com/moyoez/localsend-go/api/models"
+	"github.com/moyoez/localsend-go/tool"
+	"github.com/moyoez/localsend-go/types"
 )
 
 // Server represents the HTTP API server for receiving TCP API requests
