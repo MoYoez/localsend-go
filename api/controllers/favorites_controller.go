@@ -5,13 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/moyoez/localsend-base-protocol-golang/tool"
+	"github.com/moyoez/localsend-base-protocol-golang/types"
 )
-
-// UserFavoritesAddRequest represents the request body for adding a favorite device
-type UserFavoritesAddRequest struct {
-	Fingerprint string `json:"favorite_fingerprint"`
-	Alias       string `json:"favorite_alias"`
-}
 
 // UserFavoritesList returns the list of favorite devices.
 // GET /api/self/v1/favorites
@@ -23,7 +18,7 @@ func UserFavoritesList(c *gin.Context) {
 // UserFavoritesAdd adds a device to favorites.
 // POST /api/self/v1/favorites
 func UserFavoritesAdd(c *gin.Context) {
-	var request UserFavoritesAddRequest
+	var request types.UserFavoritesAddRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, tool.FastReturnError("Invalid request body: "+err.Error()))
 		return

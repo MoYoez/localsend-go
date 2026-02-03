@@ -10,12 +10,6 @@ import (
 	"github.com/moyoez/localsend-base-protocol-golang/types"
 )
 
-// SessionContext holds the context and cancel function for a session
-type SessionContext struct {
-	Ctx    context.Context
-	Cancel context.CancelFunc
-}
-
 var (
 	uploadSessionMu        sync.RWMutex
 	DefaultUploadFolder    = "uploads"
@@ -25,7 +19,7 @@ var (
 	confirmRecvChans       = ttlworker.NewCache[string, chan types.ConfirmResult](tool.DefaultTTL)
 	v1Sessions             = ttlworker.NewCache[string, string](tool.DefaultTTL)
 	// sessionContexts stores the context for each session to support cancellation
-	sessionContexts = ttlworker.NewCache[string, *SessionContext](tool.DefaultTTL)
+	sessionContexts = ttlworker.NewCache[string, *types.SessionContext](tool.DefaultTTL)
 	// uploadStats tracks success/failure counts per session
 	uploadStats = ttlworker.NewCache[string, *types.SessionUploadStats](tool.DefaultTTL)
 )
@@ -218,7 +212,7 @@ func CreateSessionContext(sessionId string) context.Context {
 	uploadSessionMu.Lock()
 	defer uploadSessionMu.Unlock()
 	ctx, cancel := context.WithCancel(context.Background())
-	sessionContexts.Set(sessionId, &SessionContext{
+	sessionContexts.Set(sessionId, &types.SessionContext{
 		Ctx:    ctx,
 		Cancel: cancel,
 	})

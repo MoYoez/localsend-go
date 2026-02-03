@@ -6,6 +6,7 @@ import (
 	"github.com/moyoez/localsend-base-protocol-golang/boardcast"
 	"github.com/moyoez/localsend-base-protocol-golang/notify"
 	"github.com/moyoez/localsend-base-protocol-golang/tool"
+	"github.com/moyoez/localsend-base-protocol-golang/types"
 )
 
 func main() {
@@ -56,17 +57,17 @@ func main() {
 	switch {
 	case FlagConfig.UseLegacyMode:
 		tool.DefaultLogger.Info("Using Legacy Mode: HTTP scanning")
-		boardcast.SetScanConfig(boardcast.ScanModeHTTP, message, httpMessage, FlagConfig.ScanTimeout)
+		boardcast.SetScanConfig(types.ScanModeHTTP, message, httpMessage, FlagConfig.ScanTimeout)
 		go boardcast.ListenMulticastUsingHTTPWithTimeout(httpMessage, FlagConfig.ScanTimeout)
 	case FlagConfig.UseMixedScan:
 		tool.DefaultLogger.Info("Using Mixed Scan Mode: UDP and HTTP scanning")
-		boardcast.SetScanConfig(boardcast.ScanModeMixed, message, httpMessage, FlagConfig.ScanTimeout)
+		boardcast.SetScanConfig(types.ScanModeMixed, message, httpMessage, FlagConfig.ScanTimeout)
 		go boardcast.ListenMulticastUsingUDP(message)
 		go boardcast.SendMulticastUsingUDPWithTimeout(message, FlagConfig.ScanTimeout)
 		go boardcast.ListenMulticastUsingHTTPWithTimeout(httpMessage, FlagConfig.ScanTimeout)
 	default:
 		tool.DefaultLogger.Info("Using UDP multicast mode")
-		boardcast.SetScanConfig(boardcast.ScanModeUDP, message, httpMessage, FlagConfig.ScanTimeout)
+		boardcast.SetScanConfig(types.ScanModeUDP, message, httpMessage, FlagConfig.ScanTimeout)
 		go boardcast.ListenMulticastUsingUDP(message)
 		go boardcast.SendMulticastUsingUDPWithTimeout(message, FlagConfig.ScanTimeout)
 	}

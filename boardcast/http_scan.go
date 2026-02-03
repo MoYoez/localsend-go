@@ -66,7 +66,7 @@ func scanOneIPHTTP(targetIP string, payloadBytes []byte, httpClient *http.Client
 	}
 	tool.DefaultLogger.Infof("scanOneIPHTTP: discovered device at %s: %s (fingerprint: %s)", urlStr, remote.Alias, remote.Fingerprint)
 	if remote.Fingerprint != "" {
-		share.SetUserScanCurrent(remote.Fingerprint, share.UserScanCurrentItem{
+		share.SetUserScanCurrent(remote.Fingerprint, types.UserScanCurrentItem{
 			Ipaddress: targetIP,
 			VersionMessage: types.VersionMessage{
 				Alias:       remote.Alias,

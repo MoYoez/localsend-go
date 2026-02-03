@@ -13,6 +13,8 @@ import (
 	"math/big"
 	"math/rand"
 	"time"
+
+	"github.com/moyoez/localsend-base-protocol-golang/types"
 )
 
 var (
@@ -23,7 +25,7 @@ var (
 // If certificate exists in config, uses its hash. Otherwise generates cert first and returns its hash.
 // Also updates the config's CertPEM and KeyPEM fields.
 // Work in HTTP Method, if fingerprint existed, do not change it, and keep it here safely.
-func GetOrCreateFingerprintFromConfig(cfg *AppConfig) string {
+func GetOrCreateFingerprintFromConfig(cfg *types.AppConfig) string {
 	// Try to load existing certificate from config
 	if cfg.CertPEM != "" && cfg.KeyPEM != "" {
 		certDER, _, err := loadTLSCertFromPEM(cfg.CertPEM, cfg.KeyPEM)
@@ -65,7 +67,7 @@ func GetOrCreateFingerprintFromConfig(cfg *AppConfig) string {
 // GetOrCreateTLSCertFromConfig loads existing TLS certificate from config or generates a new one.
 // Certificate content is stored in config's CertPEM and KeyPEM fields.
 // Always work in tls method.
-func GetOrCreateTLSCertFromConfig(cfg *AppConfig) (certDER []byte, keyDER []byte, err error) {
+func GetOrCreateTLSCertFromConfig(cfg *types.AppConfig) (certDER []byte, keyDER []byte, err error) {
 	// Try to load existing certificate from config
 	if cfg.CertPEM != "" && cfg.KeyPEM != "" {
 		certDER, keyDER, err = loadTLSCertFromPEM(cfg.CertPEM, cfg.KeyPEM)

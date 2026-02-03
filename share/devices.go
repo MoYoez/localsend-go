@@ -12,31 +12,15 @@ import (
 	"github.com/moyoez/localsend-base-protocol-golang/types"
 )
 
-// ttl
-
-type UserScanCurrentItem struct {
-	Ipaddress string `json:"ip_address"`
-	types.VersionMessage
-}
-
-// SelfNetworkInfo represents the local device's network information
-// including IP address and broadcast segment number
-type SelfNetworkInfo struct {
-	InterfaceName string `json:"interface_name"` // network interface name
-	IPAddress     string `json:"ip_address"`     // ip address
-	Number        string `json:"number"`         // number
-	NumberInt     int    `json:"number_int"`     // number int
-}
-
 const (
 	DefaultTTL = 300 * time.Second // set 300 seconds.
 )
 
 var (
-	UserScanCurrent = ttlworker.NewCache[string, UserScanCurrentItem](DefaultTTL)
+	UserScanCurrent = ttlworker.NewCache[string, types.UserScanCurrentItem](DefaultTTL)
 )
 
-func SetUserScanCurrent(sessionId string, data UserScanCurrentItem) {
+func SetUserScanCurrent(sessionId string, data types.UserScanCurrentItem) {
 	// Check if device exists and if info has changed
 	existing, exists := GetUserScanCurrent(sessionId)
 
@@ -59,7 +43,7 @@ func SetUserScanCurrent(sessionId string, data UserScanCurrentItem) {
 		}
 
 		// Send notification
-		notification := &notify.Notification{
+		notification := &types.Notification{
 			Type:    eventType,
 			Title:   "Device " + map[bool]string{true: "Discovered", false: "Updated"}[isNew],
 			Message: fmt.Sprintf("%s at %s", data.Alias, data.Ipaddress),
@@ -82,7 +66,7 @@ func SetUserScanCurrent(sessionId string, data UserScanCurrentItem) {
 }
 
 // hasDeviceInfoChanged checks if device info has changed
-func hasDeviceInfoChanged(a, b UserScanCurrentItem) bool {
+func hasDeviceInfoChanged(a, b types.UserScanCurrentItem) bool {
 	return a.Ipaddress != b.Ipaddress ||
 		a.Fingerprint != b.Fingerprint ||
 		a.Alias != b.Alias ||
@@ -93,14 +77,14 @@ func hasDeviceInfoChanged(a, b UserScanCurrentItem) bool {
 		a.Version != b.Version
 }
 
-func GetUserScanCurrent(sessionId string) (UserScanCurrentItem, bool) {
+func GetUserScanCurrent(sessionId string) (types.UserScanCurrentItem, bool) {
 	data := UserScanCurrent.Get(sessionId)
 	return data, data.Ipaddress != ""
 }
 
 func ListUserScanCurrent() []string {
 	keys := make([]string, 0)
-	err := UserScanCurrent.Range(func(k string, v UserScanCurrentItem) error {
+	err := UserScanCurrent.Range(func(k string, v types.UserScanCurrentItem) error {
 		keys = append(keys, k)
 		return nil
 	})
@@ -114,8 +98,8 @@ func ListUserScanCurrent() []string {
 // It ignores tun/vpn interfaces and loopback interfaces.
 // The number is derived from the last octet of the IP address.
 // For example: 192.168.3.12 -> #12
-func GetSelfNetworkInfos() []SelfNetworkInfo {
-	var result []SelfNetworkInfo
+func GetSelfNetworkInfos() []types.SelfNetworkInfo {
+	var result []types.SelfNetworkInfo
 
 	interfaces, err := net.Interfaces()
 	if err != nil {
@@ -149,7 +133,7 @@ func GetSelfNetworkInfos() []SelfNetworkInfo {
 			lastOctet := int(ip[3])
 			number := fmt.Sprintf("#%d", lastOctet)
 
-			result = append(result, SelfNetworkInfo{
+			result = append(result, types.SelfNetworkInfo{
 				InterfaceName: iface.Name,
 				IPAddress:     ip.String(),
 				Number:        number,

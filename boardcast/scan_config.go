@@ -7,28 +7,11 @@ import (
 	"github.com/moyoez/localsend-base-protocol-golang/types"
 )
 
-// ScanMode defines the scanning mode
-type ScanMode int
-
-const (
-	ScanModeUDP   ScanMode = iota // UDP multicast only
-	ScanModeHTTP                  // HTTP scanning only (legacy mode)
-	ScanModeMixed                 // Both UDP and HTTP scanning
-)
-
-// ScanConfig holds the current scan configuration for scan-now API
-type ScanConfig struct {
-	Mode        ScanMode
-	SelfMessage *types.VersionMessage
-	SelfHTTP    *types.VersionMessageHTTP
-	Timeout     int // timeout in seconds, 0 means no timeout
-}
-
 // SetScanConfig sets the current scan configuration for scan-now API
-func SetScanConfig(mode ScanMode, selfMessage *types.VersionMessage, selfHTTP *types.VersionMessageHTTP, timeout int) {
+func SetScanConfig(mode types.ScanMode, selfMessage *types.VersionMessage, selfHTTP *types.VersionMessageHTTP, timeout int) {
 	currentScanConfigMu.Lock()
 	defer currentScanConfigMu.Unlock()
-	currentScanConfig = &ScanConfig{
+	currentScanConfig = &types.ScanConfig{
 		Mode:        mode,
 		SelfMessage: selfMessage,
 		SelfHTTP:    selfHTTP,
@@ -37,7 +20,7 @@ func SetScanConfig(mode ScanMode, selfMessage *types.VersionMessage, selfHTTP *t
 }
 
 // GetScanConfig returns the current scan configuration
-func GetScanConfig() *ScanConfig {
+func GetScanConfig() *types.ScanConfig {
 	currentScanConfigMu.RLock()
 	defer currentScanConfigMu.RUnlock()
 	return currentScanConfig
@@ -95,21 +78,21 @@ func ScanNow() error {
 	}
 
 	switch config.Mode {
-	case ScanModeUDP:
+	case types.ScanModeUDP:
 		if config.SelfMessage == nil {
 			return fmt.Errorf("self message not configured for UDP scan")
 		}
 		tool.DefaultLogger.Debug("Sending UDP multicast scan...")
 		return ScanOnceUDP(config.SelfMessage)
 
-	case ScanModeHTTP:
+	case types.ScanModeHTTP:
 		if config.SelfHTTP == nil {
 			return fmt.Errorf("self HTTP message not configured for HTTP scan")
 		}
 		tool.DefaultLogger.Debug("Performing HTTP scan...")
 		return ScanOnceHTTP(config.SelfHTTP)
 
-	case ScanModeMixed:
+	case types.ScanModeMixed:
 		var udpErr, httpErr error
 		if config.SelfMessage != nil {
 			tool.DefaultLogger.Debug("Sending UDP multicast scan (mixed mode)...")
@@ -137,21 +120,21 @@ func ScanNow() error {
 
 // restartAutoScanLoops restarts the auto scan goroutines based on configuration.
 // This is called when auto scan has timed out and needs to be restarted.
-func restartAutoScanLoops(config *ScanConfig) {
+func restartAutoScanLoops(config *types.ScanConfig) {
 	if config == nil {
 		return
 	}
 	timeout := config.Timeout
 	switch config.Mode {
-	case ScanModeUDP:
+	case types.ScanModeUDP:
 		if config.SelfMessage != nil {
 			go SendMulticastUsingUDPWithTimeout(config.SelfMessage, timeout)
 		}
-	case ScanModeHTTP:
+	case types.ScanModeHTTP:
 		if config.SelfHTTP != nil {
 			go ListenMulticastUsingHTTPWithTimeout(config.SelfHTTP, timeout)
 		}
-	case ScanModeMixed:
+	case types.ScanModeMixed:
 		if config.SelfMessage != nil {
 			go SendMulticastUsingUDPWithTimeout(config.SelfMessage, timeout)
 		}

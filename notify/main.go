@@ -12,6 +12,7 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/moyoez/localsend-base-protocol-golang/tool"
+	"github.com/moyoez/localsend-base-protocol-golang/types"
 )
 
 // Configuration for Unix Domain Socket notification
@@ -23,22 +24,13 @@ var (
 	UseNotify         = true
 )
 
-// Notification represents a notification message structure
-type Notification struct {
-	Type       string         `json:"type,omitempty"`       // Notification type, e.g. "upload_start", "upload_end", etc.
-	Title      string         `json:"title,omitempty"`      // Notification title
-	Message    string         `json:"message,omitempty"`    // Notification message/content
-	Data       map[string]any `json:"data,omitempty"`       // Additional data fields
-	IsTextOnly bool           `json:"isTextOnly,omitempty"` // Indicates if this is plain text content
-}
-
 // SetUseNotify sets whether to use notify
 func SetUseNotify(use bool) {
 	UseNotify = use
 }
 
 // SendNotification sends notification via Unix Domain Socket
-func SendNotification(notification *Notification, socketPath string) error {
+func SendNotification(notification *types.Notification, socketPath string) error {
 	if !UseNotify {
 		return nil
 	}
@@ -127,7 +119,7 @@ func SendNotification(notification *Notification, socketPath string) error {
 // SendUploadNotification sends upload-related notifications using Unix Domain Socket
 // eventType should be "upload_start" or "upload_end"
 func SendUploadNotification(eventType, sessionId, fileId string, fileInfo map[string]any) error {
-	notification := &Notification{
+	notification := &types.Notification{
 		Type: eventType,
 		Data: map[string]any{
 			"sessionId": sessionId,
@@ -196,7 +188,7 @@ func SendUploadNotification(eventType, sessionId, fileId string, fileInfo map[st
 
 // SendSimpleNotification sends a simple text notification
 func SendSimpleNotification(title, message string) error {
-	notification := &Notification{
+	notification := &types.Notification{
 		Type:    "info",
 		Title:   title,
 		Message: message,

@@ -109,7 +109,7 @@ func HandlePrepareDownload(c *gin.Context) {
 				filesList = append(filesList, info)
 			}
 
-			notification := &notify.Notification{
+			notification := &types.Notification{
 				Type:    "confirm_download",
 				Title:   "Confirm Download",
 				Message: "Receiver is requesting to download files. Allow?",

@@ -7,6 +7,7 @@ import (
 	"github.com/moyoez/localsend-base-protocol-golang/boardcast"
 	"github.com/moyoez/localsend-base-protocol-golang/share"
 	"github.com/moyoez/localsend-base-protocol-golang/tool"
+	"github.com/moyoez/localsend-base-protocol-golang/types"
 )
 
 // UserGetNetworkInfo returns local network interface information with IP addresses and segment numbers.
@@ -20,7 +21,7 @@ func UserGetNetworkInfo(c *gin.Context) {
 // GET /api/self/v1/scan-current
 func UserScanCurrent(c *gin.Context) {
 	keys := share.ListUserScanCurrent()
-	values := make([]share.UserScanCurrentItem, 0)
+	values := make([]types.UserScanCurrentItem, 0)
 	for _, key := range keys {
 		item, ok := share.GetUserScanCurrent(key)
 		if !ok {
@@ -40,7 +41,7 @@ func UserScanNow(c *gin.Context) {
 		return
 	}
 	keys := share.ListUserScanCurrent()
-	values := make([]share.UserScanCurrentItem, 0)
+	values := make([]types.UserScanCurrentItem, 0)
 	for _, key := range keys {
 		item, ok := share.GetUserScanCurrent(key)
 		if !ok {

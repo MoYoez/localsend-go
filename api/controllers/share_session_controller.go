@@ -15,23 +15,10 @@ import (
 	"github.com/moyoez/localsend-base-protocol-golang/types"
 )
 
-// CreateShareSessionRequest represents the request body for creating a share session
-type CreateShareSessionRequest struct {
-	Files      map[string]types.FileInput `json:"files"`
-	Pin        string                     `json:"pin,omitempty"`
-	AutoAccept bool                       `json:"autoAccept"`
-}
-
-// CreateShareSessionResponse represents the response for create-share-session
-type CreateShareSessionResponse struct {
-	SessionId   string `json:"sessionId"`
-	DownloadUrl string `json:"downloadUrl"`
-}
-
 // UserCreateShareSession creates a share session for the download API
 // POST /api/self/v1/create-share-session
 func UserCreateShareSession(c *gin.Context) {
-	var request CreateShareSessionRequest
+	var request types.CreateShareSessionRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, tool.FastReturnError("Invalid request body: "+err.Error()))
 		return
@@ -41,7 +28,7 @@ func UserCreateShareSession(c *gin.Context) {
 		return
 	}
 
-	files := make(map[string]models.ShareFileEntry)
+	files := make(map[string]types.ShareFileEntry)
 	for fileId, fileInput := range request.Files {
 		input := fileInput
 		if input.FileUrl == "" {
@@ -77,7 +64,7 @@ func UserCreateShareSession(c *gin.Context) {
 				if idVal == "" {
 					idVal = id
 				}
-				files[id] = models.ShareFileEntry{
+				files[id] = types.ShareFileEntry{
 					FileInfo: types.FileInfo{
 						ID:       idVal,
 						FileName: inp.FileName,
@@ -100,7 +87,7 @@ func UserCreateShareSession(c *gin.Context) {
 		if fileIdVal == "" {
 			fileIdVal = fileId
 		}
-		files[fileId] = models.ShareFileEntry{
+		files[fileId] = types.ShareFileEntry{
 			FileInfo: types.FileInfo{
 				ID:       fileIdVal,
 				FileName: input.FileName,
@@ -114,7 +101,7 @@ func UserCreateShareSession(c *gin.Context) {
 	}
 
 	sessionId := tool.GenerateShortSessionID()
-	session := &models.ShareSession{
+	session := &types.ShareSession{
 		SessionId:  sessionId,
 		Files:      files,
 		CreatedAt:  time.Now(),
@@ -136,7 +123,7 @@ func UserCreateShareSession(c *gin.Context) {
 	}
 	downloadUrl := fmt.Sprintf("%s://%s:%d/?session=%s", protocol, host, port, sessionId)
 
-	c.JSON(http.StatusOK, tool.FastReturnSuccessWithData(CreateShareSessionResponse{
+	c.JSON(http.StatusOK, tool.FastReturnSuccessWithData(types.CreateShareSessionResponse{
 		SessionId:   sessionId,
 		DownloadUrl: downloadUrl,
 	}))

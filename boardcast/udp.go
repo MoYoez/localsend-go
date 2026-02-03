@@ -52,7 +52,7 @@ func listenOnInterface(iface *net.Interface, addr *net.UDPAddr, self *types.Vers
 				tool.DefaultLogger.Errorf("Unexpected UDP address: %v\n", castErr)
 				continue
 			}
-			share.SetUserScanCurrent(incoming.Fingerprint, share.UserScanCurrentItem{
+			share.SetUserScanCurrent(incoming.Fingerprint, types.UserScanCurrentItem{
 				Ipaddress:      udpAddr.IP.String(),
 				VersionMessage: incoming,
 			})

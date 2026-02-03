@@ -1,32 +1,14 @@
 package tool
 
-import "flag"
+import (
+	"flag"
 
-// Config holds runtime overrides from CLI flags.
-type Config struct {
-	Log                      string
-	UseMultcastAddress       string
-	UseMultcastPort          int
-	UseConfigPath            string
-	UseDefaultUploadFolder   string
-	UseLegacyMode            bool
-	UseReferNetworkInterface string // fixes when using virtual network interface. e.g. Clash TUN.
-	UsePin                   string
-	UseAutoSave              bool // if false, user require to confirm before recv.
-	UseAutoSaveFromFavorites bool // if true and useAutoSave is false, auto-accept from favorite devices only.
-	UseAlias                 string
-	UseMixedScan             bool   // if true, use mixed scan mode, both UDP and HTTP.
-	SkipNotify               bool   // if true, skip notify mode.
-	UseHttp                  bool   // if true, use http protocol; if false, use https protocol. Alias for protocol config.
-	ScanTimeout              int    // scan timeout in seconds, default 500. After timeout, auto scan will stop.
-	UseDownload              bool   // if true, enable download API (prepare-download, download, download page)
-	UseWebOutPath            string // path to Next.js static export output (default: web/out)
-	DoNotMakeSessionFolder   bool   // if true, do not make any session folder, if meet same files
-}
+	"github.com/moyoez/localsend-base-protocol-golang/types"
+)
 
 // SetFlags parses CLI flags and returns the override config.
-func SetFlags() Config {
-	var cfg Config
+func SetFlags() types.Config {
+	var cfg types.Config
 	flag.StringVar(&cfg.Log, "log", "prod", "log mode: dev|prod|none")
 	flag.StringVar(&cfg.UseMultcastAddress, "useMultcastAddress", "", "override multicast address")
 	flag.IntVar(&cfg.UseMultcastPort, "useMultcastPort", 0, "override multicast port")

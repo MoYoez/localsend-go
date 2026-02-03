@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/moyoez/localsend-base-protocol-golang/tool"
+	"github.com/moyoez/localsend-base-protocol-golang/types"
 )
 
 // refer to https://github.com/localsend/protocol/blob/main/README.md#1-defaults
@@ -33,7 +34,7 @@ var (
 
 	// currentScanConfig holds the current scan configuration
 	currentScanConfigMu sync.RWMutex
-	currentScanConfig   *ScanConfig
+	currentScanConfig   *types.ScanConfig
 
 	// autoScanControl controls the auto scan loops
 	autoScanControlMu   sync.Mutex

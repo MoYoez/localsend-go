@@ -4,7 +4,7 @@ import (
 	"github.com/moyoez/localsend-base-protocol-golang/types"
 )
 
-func BuildVersionMessages(appCfg *AppConfig, Flags Config) (*types.VersionMessage, *types.VersionMessageHTTP) {
+func BuildVersionMessages(appCfg *types.AppConfig, Flags types.Config) (*types.VersionMessage, *types.VersionMessageHTTP) {
 	if Flags.UseAlias != "" {
 		appCfg.Alias = Flags.UseAlias
 	}

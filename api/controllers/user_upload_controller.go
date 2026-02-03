@@ -24,72 +24,10 @@ import (
 	"github.com/moyoez/localsend-base-protocol-golang/types"
 )
 
-// UserPrepareUploadRequest represents the prepare upload request
-type UserPrepareUploadRequest struct {
-	TargetTo              string                     `json:"targetTo"`
-	Files                 map[string]types.FileInput `json:"files,omitempty"`
-	UseFolderUpload       bool                       `json:"useFolderUpload,omitempty"`
-	FolderPath            string                     `json:"folderPath,omitempty"`
-	UseFastSender         bool                       `json:"useFastSender,omitempty"`
-	UseFastSenderIPSuffex string                     `json:"useFastSenderIPSuffex,omitempty"`
-	UseFastSenderIp       string                     `json:"useFastSenderIp,omitempty"`
-}
-
-// UserUploadRequest represents the actual upload request
-type UserUploadRequest struct {
-	SessionId string `json:"sessionId"`
-	FileId    string `json:"fileId"`
-	Token     string `json:"token"`
-	FileUrl   string `json:"fileUrl"`
-}
-
-// UserUploadBatchRequest represents batch upload request
-type UserUploadBatchRequest struct {
-	SessionId       string               `json:"sessionId"`
-	Files           []UserUploadFileItem `json:"files,omitempty"`
-	UseFolderUpload bool                 `json:"useFolderUpload,omitempty"`
-	FolderPath      string               `json:"folderPath,omitempty"`
-}
-
-// UserUploadFileItem represents a single file in batch upload
-type UserUploadFileItem struct {
-	FileId  string `json:"fileId"`
-	Token   string `json:"token"`
-	FileUrl string `json:"fileUrl"`
-}
-
-// UserUploadBatchResult represents the result of a batch upload operation
-type UserUploadBatchResult struct {
-	Total   int                    `json:"total"`
-	Success int                    `json:"success"`
-	Failed  int                    `json:"failed"`
-	Results []UserUploadItemResult `json:"results"`
-}
-
-// UserUploadItemResult represents the result of a single file upload
-type UserUploadItemResult struct {
-	FileId  string `json:"fileId"`
-	Success bool   `json:"success"`
-	Error   string `json:"error,omitempty"`
-}
-
-// UserUploadSession stores user upload session information
-type UserUploadSession struct {
-	Target    share.UserScanCurrentItem
-	SessionId string
-	Tokens    map[string]string
-}
-
-// UserUploadSessionContext holds the context and cancel function for a user upload session
-type UserUploadSessionContext struct {
-	Ctx    context.Context
-	Cancel context.CancelFunc
-}
-
 var (
 	UserUploadSessionTTL      = 60 * time.Minute
-	UserUploadSessions        = ttlworker.NewCache[string, UserUploadSession](UserUploadSessionTTL)
-	userUploadSessionContexts = ttlworker.NewCache[string, *UserUploadSessionContext](UserUploadSessionTTL)
+	UserUploadSessions        = ttlworker.NewCache[string, types.UserUploadSession](UserUploadSessionTTL)
+	userUploadSessionContexts = ttlworker.NewCache[string, *types.UserUploadSessionContext](UserUploadSessionTTL)
 	userUploadSessionMu       sync.RWMutex
 )
 
@@ -98,7 +36,7 @@ func CreateUserUploadSessionContext(sessionId string) context.Context {
 	userUploadSessionMu.Lock()
 	defer userUploadSessionMu.Unlock()
 	ctx, cancel := context.WithCancel(context.Background())
-	userUploadSessionContexts.Set(sessionId, &UserUploadSessionContext{
+	userUploadSessionContexts.Set(sessionId, &types.UserUploadSessionContext{
 		Ctx:    ctx,
 		Cancel: cancel,
 	})
@@ -157,14 +95,14 @@ func resolveFastSenderIP(fullIP, ipSuffix string) (string, error) {
 // UserPrepareUpload handles prepare upload request
 // POST /api/self/v1/prepare-upload
 func UserPrepareUpload(c *gin.Context) {
-	var request UserPrepareUploadRequest
+	var request types.UserPrepareUploadRequest
 	pin := c.Query("pin")
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, tool.FastReturnError("Invalid request body: "+err.Error()))
 		return
 	}
 
-	var targetItem share.UserScanCurrentItem
+	var targetItem types.UserScanCurrentItem
 	var ok bool
 
 	if request.UseFastSender {
@@ -180,7 +118,7 @@ func UserPrepareUpload(c *gin.Context) {
 			c.JSON(http.StatusNotFound, tool.FastReturnError("Failed to fetch device info: "+err.Error()))
 			return
 		}
-		targetItem = share.UserScanCurrentItem{
+		targetItem = types.UserScanCurrentItem{
 			Ipaddress: targetIP,
 			VersionMessage: types.VersionMessage{
 				Alias:       deviceInfo.Alias,
@@ -303,7 +241,7 @@ func UserPrepareUpload(c *gin.Context) {
 		return
 	}
 
-	sessionInfo := UserUploadSession{
+	sessionInfo := types.UserUploadSession{
 		Target:    targetItem,
 		SessionId: prepareResponse.SessionId,
 		Tokens:    prepareResponse.Files,
@@ -326,7 +264,7 @@ func UserUpload(c *gin.Context) {
 	contentType := c.GetHeader("Content-Type")
 
 	if strings.Contains(contentType, "application/json") {
-		var request UserUploadRequest
+		var request types.UserUploadRequest
 		if err := c.ShouldBindJSON(&request); err != nil {
 			c.JSON(http.StatusBadRequest, tool.FastReturnError("Invalid JSON request: "+err.Error()))
 			return
@@ -420,7 +358,7 @@ func UserUpload(c *gin.Context) {
 // UserUploadBatch handles batch file upload request
 // POST /api/self/v1/upload-batch
 func UserUploadBatch(c *gin.Context) {
-	var request UserUploadBatchRequest
+	var request types.UserUploadBatchRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, tool.FastReturnError("Invalid JSON request: "+err.Error()))
 		return
@@ -429,7 +367,7 @@ func UserUploadBatch(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, tool.FastReturnError("Missing required parameter: sessionId"))
 		return
 	}
-	additionalFiles := make([]UserUploadFileItem, len(request.Files))
+	additionalFiles := make([]types.UserUploadFileItem, len(request.Files))
 	copy(additionalFiles, request.Files)
 
 	if request.UseFolderUpload {
@@ -447,13 +385,13 @@ func UserUploadBatch(c *gin.Context) {
 			c.JSON(http.StatusNotFound, tool.FastReturnError("Session not found or expired"))
 			return
 		}
-		request.Files = make([]UserUploadFileItem, 0, len(fileIdToPathMap)+len(additionalFiles))
+		request.Files = make([]types.UserUploadFileItem, 0, len(fileIdToPathMap)+len(additionalFiles))
 		for fileId, filePath := range fileIdToPathMap {
 			token, ok := sessionInfo.Tokens[fileId]
 			if !ok {
 				continue
 			}
-			request.Files = append(request.Files, UserUploadFileItem{
+			request.Files = append(request.Files, types.UserUploadFileItem{
 				FileId:  fileId,
 				Token:   token,
 				FileUrl: "file://" + filePath,
@@ -482,11 +420,11 @@ func UserUploadBatch(c *gin.Context) {
 		ctx = context.Background()
 	}
 
-	result := UserUploadBatchResult{
+	result := types.UserUploadBatchResult{
 		Total:   len(request.Files),
 		Success: 0,
 		Failed:  0,
-		Results: make([]UserUploadItemResult, 0, len(request.Files)),
+		Results: make([]types.UserUploadItemResult, 0, len(request.Files)),
 	}
 	targetAddr := &net.UDPAddr{
 		IP:   net.ParseIP(sessionInfo.Target.Ipaddress).To4(),
@@ -496,12 +434,12 @@ func UserUploadBatch(c *gin.Context) {
 	for _, fileItem := range request.Files {
 		select {
 		case <-ctx.Done():
-			result.Results = append(result.Results, UserUploadItemResult{FileId: fileItem.FileId, Success: false, Error: "Upload cancelled"})
+			result.Results = append(result.Results, types.UserUploadItemResult{FileId: fileItem.FileId, Success: false, Error: "Upload cancelled"})
 			result.Failed++
 			goto batchComplete
 		default:
 		}
-		itemResult := UserUploadItemResult{FileId: fileItem.FileId, Success: false}
+		itemResult := types.UserUploadItemResult{FileId: fileItem.FileId, Success: false}
 		if fileItem.FileId == "" || fileItem.Token == "" || fileItem.FileUrl == "" {
 			itemResult.Error = "Missing required parameters: fileId, token, or fileUrl"
 			result.Results = append(result.Results, itemResult)

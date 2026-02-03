@@ -6,41 +6,15 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/moyoez/localsend-base-protocol-golang/types"
 )
 
 var (
 	ConfigPath           = "config.yaml" // be aware that it can be changed, default to ./config.yaml
-	CurrentConfig        AppConfig
-	ProgramCurrentConfig ProgramConfig
+	CurrentConfig        types.AppConfig
+	ProgramCurrentConfig types.ProgramConfig
 )
-
-// FavoriteDeviceEntry represents a favorite device with only fingerprint and alias
-type FavoriteDeviceEntry struct {
-	Fingerprint string `yaml:"favorite_fingerprint" json:"favorite_fingerprint"`
-	Alias       string `yaml:"favorite_alias" json:"favorite_alias"`
-}
-
-type AppConfig struct {
-	Alias                 string                `yaml:"alias"`
-	Version               string                `yaml:"version"`
-	DeviceModel           string                `yaml:"deviceModel"`
-	DeviceType            string                `yaml:"deviceType"`
-	Fingerprint           string                `yaml:"fingerprint"`
-	Port                  int                   `yaml:"port"`
-	Protocol              string                `yaml:"protocol"`
-	Download              bool                  `yaml:"download"`
-	Announce              bool                  `yaml:"announce"`
-	CertPEM               string                `yaml:"certPEM,omitempty"`
-	KeyPEM                string                `yaml:"keyPEM,omitempty"`
-	AutoSaveFromFavorites bool                  `yaml:"autoSaveFromFavorites,omitempty"`
-	FavoriteDevices       []FavoriteDeviceEntry `yaml:"favoriteDevices,omitempty"`
-}
-
-type ProgramConfig struct {
-	Pin                   string `yaml:"pin"`
-	AutoSave              bool   `yaml:"autoSave"`
-	AutoSaveFromFavorites bool   `yaml:"autoSaveFromFavorites"`
-}
 
 func init() {
 	ProgramCurrentConfig = DefaultProgramConfig()
@@ -52,21 +26,21 @@ func SetProgramConfigStatus(pin string, autoSave bool, autoSaveFromFavorites boo
 	ProgramCurrentConfig.AutoSaveFromFavorites = autoSaveFromFavorites
 }
 
-func GetProgramConfigStatus() ProgramConfig {
+func GetProgramConfigStatus() types.ProgramConfig {
 	return ProgramCurrentConfig
 }
 
 // this save to memory , no file provided.
-func DefaultProgramConfig() ProgramConfig {
-	return ProgramConfig{
+func DefaultProgramConfig() types.ProgramConfig {
+	return types.ProgramConfig{
 		Pin:                   "",
 		AutoSave:              true,
 		AutoSaveFromFavorites: false,
 	}
 }
 
-func defaultConfig() AppConfig {
-	return AppConfig{
+func defaultConfig() types.AppConfig {
+	return types.AppConfig{
 		Alias:                 NameGenerator(), // so I change it, use official name generator. :Ciallo~
 		Version:               "2.0",           // Protocol Version: maybe(
 		DeviceModel:           "steamdeck",     // you can change it if you prefer.
@@ -77,7 +51,7 @@ func defaultConfig() AppConfig {
 		Download:              false,           // document said that  default is false, i dont know how to use it, so make it default.
 		Announce:              true,
 		AutoSaveFromFavorites: false,
-		FavoriteDevices:       []FavoriteDeviceEntry{}, // I dont like yaml btw
+		FavoriteDevices:       []types.FavoriteDeviceEntry{}, // I dont like yaml btw
 	}
 }
 
@@ -86,7 +60,7 @@ func generateRandomFingerprintForConfig() string {
 	return strings.ReplaceAll(GenerateRandomUUID(), "-", "")
 }
 
-func LoadConfig(path string) (AppConfig, error) {
+func LoadConfig(path string) (types.AppConfig, error) {
 	var configChanged bool
 	if path == "" {
 		path = ConfigPath
@@ -155,7 +129,7 @@ func LoadConfig(path string) (AppConfig, error) {
 	return cfg, nil
 }
 
-func writeDefaultConfig(path string, cfg AppConfig) error {
+func writeDefaultConfig(path string, cfg types.AppConfig) error {
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return err
@@ -163,6 +137,6 @@ func writeDefaultConfig(path string, cfg AppConfig) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-func GetCurrentConfig() *AppConfig {
+func GetCurrentConfig() *types.AppConfig {
 	return &CurrentConfig
 }

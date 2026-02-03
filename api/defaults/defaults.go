@@ -38,7 +38,7 @@ func DefaultOnPrepareUpload(request *types.PrepareUploadRequest, pin string) (*t
 	pinSetted := tool.GetProgramConfigStatus().Pin
 	switch {
 	case pinSetted != "" && pin == "":
-		notification := &notify.Notification{
+		notification := &types.Notification{
 			Type:    "pin_required",
 			Title:   "PIN Required",
 			Message: fmt.Sprintf("PIN required for incoming files from %s", request.Info.Alias),
@@ -75,7 +75,7 @@ func DefaultOnPrepareUpload(request *types.PrepareUploadRequest, pin string) (*t
 			files = append(files, info)
 		}
 
-		notification := &notify.Notification{
+		notification := &types.Notification{
 			Type:    "confirm_recv",
 			Title:   "Confirm Receive",
 			Message: fmt.Sprintf("Incoming files from %s", request.Info.Alias),
