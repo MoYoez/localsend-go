@@ -2,6 +2,7 @@ package boardcast
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/moyoez/localsend-go/tool"
 	"github.com/moyoez/localsend-go/types"
@@ -94,20 +95,30 @@ func ScanNow() error {
 
 	case types.ScanModeMixed:
 		var udpErr, httpErr error
+		var wg sync.WaitGroup
 		if config.SelfMessage != nil {
-			tool.DefaultLogger.Debug("Sending UDP multicast scan (mixed mode)...")
-			udpErr = ScanOnceUDP(config.SelfMessage)
-			if udpErr != nil {
-				tool.DefaultLogger.Warnf("UDP scan failed: %v", udpErr)
-			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				tool.DefaultLogger.Debug("Sending UDP multicast scan (mixed mode)...")
+				udpErr = ScanOnceUDP(config.SelfMessage)
+				if udpErr != nil {
+					tool.DefaultLogger.Warnf("UDP scan failed: %v", udpErr)
+				}
+			}()
 		}
 		if config.SelfHTTP != nil {
-			tool.DefaultLogger.Debug("Performing HTTP scan (mixed mode)...")
-			httpErr = ScanOnceHTTP(config.SelfHTTP)
-			if httpErr != nil {
-				tool.DefaultLogger.Warnf("HTTP scan failed: %v", httpErr)
-			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				tool.DefaultLogger.Debug("Performing HTTP scan (mixed mode)...")
+				httpErr = ScanOnceHTTP(config.SelfHTTP)
+				if httpErr != nil {
+					tool.DefaultLogger.Warnf("HTTP scan failed: %v", httpErr)
+				}
+			}()
 		}
+		wg.Wait()
 		if udpErr != nil && httpErr != nil {
 			return fmt.Errorf("both UDP and HTTP scan failed: UDP: %v, HTTP: %v", udpErr, httpErr)
 		}
