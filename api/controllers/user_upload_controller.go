@@ -185,13 +185,20 @@ func UserPrepareUpload(c *gin.Context) {
 
 	filesMap := make(map[string]types.FileInfo)
 	for fileID, fileInput := range request.Files {
+		preview := fileInput.Preview
+		// When single file is text/plain and TextContent is provided, use it as preview so receiver can show text without upload
+		if request.TextContent != "" && len(request.Files) == 1 && strings.TrimSpace(strings.ToLower(fileInput.FileType)) == "text/plain" {
+			if preview == "" {
+				preview = request.TextContent
+			}
+		}
 		filesMap[fileID] = types.FileInfo{
 			ID:       fileInput.ID,
 			FileName: fileInput.FileName,
 			Size:     fileInput.Size,
 			FileType: fileInput.FileType,
 			SHA256:   fileInput.SHA256,
-			Preview:  fileInput.Preview,
+			Preview:  preview,
 		}
 	}
 

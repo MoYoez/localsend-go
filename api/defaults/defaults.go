@@ -56,6 +56,25 @@ func DefaultOnPrepareUpload(request *types.PrepareUploadRequest, pin string) (*t
 		return nil, fmt.Errorf("invalid PIN")
 	}
 
+	// Text-only message: single file, text/plain, with preview — show dialog and return 204 (no upload)
+	if len(request.Files) == 1 {
+		for _, info := range request.Files {
+			if strings.TrimSpace(strings.ToLower(info.FileType)) == "text/plain" && info.Preview != "" {
+				title := "Text Received"
+				if request.Info.Alias != "" {
+					title = fmt.Sprintf("From %s", request.Info.Alias)
+				}
+				if err := notify.SendTextReceivedNotification(request.Info.Alias, title, info.Preview, info.FileName); err != nil {
+					tool.DefaultLogger.Errorf("[Notify] Failed to send text_received notification: %v", err)
+				} else {
+					tool.DefaultLogger.Infof("[PrepareUpload] Text-only message from %s, returning 204 (no upload)", request.Info.Alias)
+				}
+				return nil, nil
+			}
+			break
+		}
+	}
+
 	programConfig := tool.GetProgramConfigStatus()
 	needConfirmation := !programConfig.AutoSave
 	if needConfirmation && programConfig.AutoSaveFromFavorites {

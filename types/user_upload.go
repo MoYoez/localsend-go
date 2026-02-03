@@ -4,6 +4,7 @@ package types
 type UserPrepareUploadRequest struct {
 	TargetTo              string               `json:"targetTo"`
 	Files                 map[string]FileInput `json:"files,omitempty"`
+	TextContent           string               `json:"textContent,omitempty"` // Optional: for single text/plain send, injected as preview when building prepare-upload
 	UseFolderUpload       bool                 `json:"useFolderUpload,omitempty"`
 	FolderPath            string               `json:"folderPath,omitempty"`
 	UseFastSender         bool                 `json:"useFastSender,omitempty"`

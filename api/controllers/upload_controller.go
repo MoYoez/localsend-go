@@ -65,8 +65,14 @@ func (ctrl *UploadController) HandlePrepareUpload(c *gin.Context) {
 		}
 	}
 
+	// Text-only message: no session, receiver already sent text_received and we return 204
+	if response == nil {
+		c.Status(http.StatusNoContent)
+		return
+	}
+
 	// Initialize session stats and send upload start notification (single notification for all files)
-	if response != nil && response.SessionId != "" {
+	if response.SessionId != "" {
 		// Initialize upload statistics for this session
 		models.InitSessionStats(response.SessionId, len(request.Files))
 

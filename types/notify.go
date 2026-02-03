@@ -11,6 +11,7 @@ const (
 	NotifyTypeDeviceDiscovered = "device_discovered"
 	NotifyTypeDeviceUpdated    = "device_updated"
 	NotifyTypeInfo             = "info"
+	NotifyTypeTextReceived     = "text_received"
 )
 
 // Notification represents a notification message structure sent via Unix socket (e.g. to Decky).

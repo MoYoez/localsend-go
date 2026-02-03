@@ -206,6 +206,23 @@ func SendSimpleNotification(title, message string) error {
 	return SendNotification(notification, DefaultUnixSocketPath)
 }
 
+// SendTextReceivedNotification sends a text-received notification (no upload session).
+// Used when prepare-upload is a single text/plain file with preview; receiver shows dialog and returns 204.
+func SendTextReceivedNotification(from, title, content, fileName string) error {
+	notification := &types.Notification{
+		Type:    types.NotifyTypeTextReceived,
+		Title:   title,
+		Message: content,
+		Data: map[string]any{
+			"from":      from,
+			"title":     title,
+			"content":   content,
+			"fileName":  fileName,
+		},
+	}
+	return SendNotification(notification, DefaultUnixSocketPath)
+}
+
 // isPlainTextType checks if the given file type is a plain text type
 func isPlainTextType(fileType string) bool {
 	if fileType == "" {
