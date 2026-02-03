@@ -100,6 +100,9 @@ func getNetworkInterfaces() ([]*net.Interface, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to get network interface %s: %v", referNetworkInterface, err)
 		}
+		if tool.RejectUnsupportNetworkInterface(iface) {
+			return nil, fmt.Errorf("network interface %s is not supported", referNetworkInterface)
+		}
 		return []*net.Interface{iface}, nil
 	}
 
@@ -112,33 +115,25 @@ func getNetworkInterfaces() ([]*net.Interface, error) {
 // Cache key includes interface config to invalidate on config change.
 func getCachedNetworkIPs() ([]string, error) {
 	var addrs []net.Addr
-	if listenAllInterfaces {
-		var err error
-		addrs, err = net.InterfaceAddrs()
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		interfaces, err := getNetworkInterfaces()
-		if err != nil {
-			return nil, err
-		}
-		for _, iface := range interfaces {
-			if iface == nil {
-				// system default: fall back to InterfaceAddrs
-				allAddrs, err := net.InterfaceAddrs()
-				if err != nil {
-					return nil, err
-				}
-				addrs = append(addrs, allAddrs...)
-				continue
-			}
-			ifaceAddrs, err := iface.Addrs()
+	interfaces, err := getNetworkInterfaces()
+	if err != nil {
+		return nil, err
+	}
+	for _, iface := range interfaces {
+		if iface == nil {
+			// system default: fall back to InterfaceAddrs
+			allAddrs, err := net.InterfaceAddrs()
 			if err != nil {
-				continue
+				return nil, err
 			}
-			addrs = append(addrs, ifaceAddrs...)
+			addrs = append(addrs, allAddrs...)
+			continue
 		}
+		ifaceAddrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		addrs = append(addrs, ifaceAddrs...)
 	}
 
 	// Build a cache key: include interface config + addresses (for change detection)
@@ -204,6 +199,9 @@ func GetPreferredOutgoingBindAddr() (*net.TCPAddr, error) {
 	iface, err := net.InterfaceByName(referNetworkInterface)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get network interface %s: %w", referNetworkInterface, err)
+	}
+	if tool.RejectUnsupportNetworkInterface(iface) {
+		return nil, fmt.Errorf("network interface %s is not supported", referNetworkInterface)
 	}
 	addrs, err := iface.Addrs()
 	if err != nil {
