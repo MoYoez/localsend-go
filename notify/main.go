@@ -116,8 +116,8 @@ func SendNotification(notification *types.Notification, socketPath string) error
 	return nil
 }
 
-// SendUploadNotification sends upload-related notifications using Unix Domain Socket
-// eventType should be "upload_start" or "upload_end"
+// SendUploadNotification sends upload-related notifications using Unix Domain Socket.
+// eventType should be types.NotifyTypeUploadStart or types.NotifyTypeUploadEnd.
 func SendUploadNotification(eventType, sessionId, fileId string, fileInfo map[string]any) error {
 	notification := &types.Notification{
 		Type: eventType,
@@ -162,7 +162,7 @@ func SendUploadNotification(eventType, sessionId, fileId string, fileInfo map[st
 
 	// Set title and message based on event type
 	switch eventType {
-	case "upload_start":
+	case types.NotifyTypeUploadStart:
 		if notification.IsTextOnly {
 			notification.Title = "Text Upload Started"
 			notification.Message = fmt.Sprintf("Text content upload started: sessionId=%s, fileId=%s", sessionId, fileId)
@@ -170,7 +170,7 @@ func SendUploadNotification(eventType, sessionId, fileId string, fileInfo map[st
 			notification.Title = "Upload Started"
 			notification.Message = fmt.Sprintf("File upload started: sessionId=%s, fileId=%s", sessionId, fileId)
 		}
-	case "upload_end":
+	case types.NotifyTypeUploadEnd:
 		if notification.IsTextOnly {
 			notification.Title = "Text Upload Completed"
 			notification.Message = fmt.Sprintf("Text content upload completed: sessionId=%s, fileId=%s", sessionId, fileId)
@@ -189,7 +189,7 @@ func SendUploadNotification(eventType, sessionId, fileId string, fileInfo map[st
 // SendSimpleNotification sends a simple text notification
 func SendSimpleNotification(title, message string) error {
 	notification := &types.Notification{
-		Type:    "info",
+		Type:    types.NotifyTypeInfo,
 		Title:   title,
 		Message: message,
 	}

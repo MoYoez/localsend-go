@@ -87,7 +87,7 @@ func (ctrl *UploadController) HandlePrepareUpload(c *gin.Context) {
 		go func(sessionId string, files []map[string]any, totalFiles int, totalSize int64) {
 			tool.DefaultLogger.Infof("[Notify] Sending upload_start notification: sessionId=%s, totalFiles=%d",
 				sessionId, totalFiles)
-			if err := notify.SendUploadNotification("upload_start", sessionId, "", map[string]any{
+			if err := notify.SendUploadNotification(types.NotifyTypeUploadStart, sessionId, "", map[string]any{
 				"totalFiles": totalFiles,
 				"totalSize":  totalSize,
 				"files":      files,
@@ -170,7 +170,7 @@ func (ctrl *UploadController) HandlePrepareV1Upload(c *gin.Context) {
 		go func(sessionId string, files []map[string]any, totalFiles int, totalSize int64) {
 			tool.DefaultLogger.Infof("[V1 Notify] Sending upload_start notification: sessionId=%s, totalFiles=%d",
 				sessionId, totalFiles)
-			if err := notify.SendUploadNotification("upload_start", sessionId, "", map[string]any{
+			if err := notify.SendUploadNotification(types.NotifyTypeUploadStart, sessionId, "", map[string]any{
 				"totalFiles": totalFiles,
 				"totalSize":  totalSize,
 				"files":      files,
@@ -230,7 +230,7 @@ func (ctrl *UploadController) HandleUploadV1Upload(c *gin.Context) {
 				models.RemoveV1Session(remoteAddr)
 				tool.DefaultLogger.Infof("[V1 Notify] Sending upload_end notification (all files processed): sessionId=%s, success=%d, failed=%d",
 					sid, stats.SuccessFiles, stats.FailedFiles)
-				if err := notify.SendUploadNotification("upload_end", sid, "", map[string]any{
+				if err := notify.SendUploadNotification(types.NotifyTypeUploadEnd, sid, "", map[string]any{
 					"totalFiles":    stats.TotalFiles,
 					"successFiles":  stats.SuccessFiles,
 					"failedFiles":   stats.FailedFiles,
@@ -272,7 +272,7 @@ func (ctrl *UploadController) HandleUploadV1Upload(c *gin.Context) {
 		go func(sid, fid string, fileInfo types.FileInfo, stats *types.SessionUploadStats) {
 			tool.DefaultLogger.Infof("[V1 Notify] Sending upload_end notification (all files processed): sessionId=%s, success=%d, failed=%d",
 				sid, stats.SuccessFiles, stats.FailedFiles)
-			if err := notify.SendUploadNotification("upload_end", sid, fid, map[string]any{
+			if err := notify.SendUploadNotification(types.NotifyTypeUploadEnd, sid, fid, map[string]any{
 				"fileName":      fileInfo.FileName,
 				"fileType":      fileInfo.FileType,
 				"totalFiles":    stats.TotalFiles,
@@ -328,7 +328,7 @@ func (ctrl *UploadController) HandleUpload(c *gin.Context) {
 			go func(sid string, stats *types.SessionUploadStats) {
 				tool.DefaultLogger.Infof("[Notify] Sending upload_end notification (all files processed): sessionId=%s, success=%d, failed=%d",
 					sid, stats.SuccessFiles, stats.FailedFiles)
-				if err := notify.SendUploadNotification("upload_end", sid, "", map[string]any{
+				if err := notify.SendUploadNotification(types.NotifyTypeUploadEnd, sid, "", map[string]any{
 					"totalFiles":    stats.TotalFiles,
 					"successFiles":  stats.SuccessFiles,
 					"failedFiles":   stats.FailedFiles,
@@ -369,7 +369,7 @@ func (ctrl *UploadController) HandleUpload(c *gin.Context) {
 		go func(sid, fid string, fileInfo types.FileInfo, stats *types.SessionUploadStats) {
 			tool.DefaultLogger.Infof("[Notify] Sending upload_end notification (all files processed): sessionId=%s, success=%d, failed=%d",
 				sid, stats.SuccessFiles, stats.FailedFiles)
-			if err := notify.SendUploadNotification("upload_end", sid, fid, map[string]any{
+			if err := notify.SendUploadNotification(types.NotifyTypeUploadEnd, sid, fid, map[string]any{
 				"fileName":      fileInfo.FileName,
 				"fileType":      fileInfo.FileType,
 				"totalFiles":    stats.TotalFiles,

@@ -39,7 +39,7 @@ func DefaultOnPrepareUpload(request *types.PrepareUploadRequest, pin string) (*t
 	switch {
 	case pinSetted != "" && pin == "":
 		notification := &types.Notification{
-			Type:    "pin_required",
+			Type:    types.NotifyTypePinRequired,
 			Title:   "PIN Required",
 			Message: fmt.Sprintf("PIN required for incoming files from %s", request.Info.Alias),
 			Data: map[string]any{
@@ -76,7 +76,7 @@ func DefaultOnPrepareUpload(request *types.PrepareUploadRequest, pin string) (*t
 		}
 
 		notification := &types.Notification{
-			Type:    "confirm_recv",
+			Type:    types.NotifyTypeConfirmRecv,
 			Title:   "Confirm Receive",
 			Message: fmt.Sprintf("Incoming files from %s", request.Info.Alias),
 			Data: map[string]any{

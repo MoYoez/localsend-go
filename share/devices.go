@@ -35,10 +35,10 @@ func SetUserScanCurrent(sessionId string, data types.UserScanCurrentItem) {
 	if isNew || isChanged {
 		var eventType string
 		if isNew {
-			eventType = "device_discovered"
+			eventType = types.NotifyTypeDeviceDiscovered
 			tool.DefaultLogger.Infof("New device discovered: %s (%s) at %s", data.Alias, data.Fingerprint, data.Ipaddress)
 		} else {
-			eventType = "device_updated"
+			eventType = types.NotifyTypeDeviceUpdated
 			tool.DefaultLogger.Infof("Device info updated: %s (%s) at %s", data.Alias, data.Fingerprint, data.Ipaddress)
 		}
 
