@@ -26,6 +26,11 @@ func RejectUnsupportNetworkInterface(iface *net.Interface) bool {
 	if iface.Flags&net.FlagMulticast == 0 {
 		return true
 	}
+	// Ban "Meta" (Clash) router interfaces by ignoring interfaces with "Meta" in the name.
+	if strings.Contains(iface.Name, "Meta") {
+		return true
+	}
+
 	// reject no v4 ipaddress.
 	ips, err := iface.Addrs()
 	if err != nil {
