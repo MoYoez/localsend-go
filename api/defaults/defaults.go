@@ -67,6 +67,7 @@ func DefaultOnPrepareUpload(request *types.PrepareUploadRequest, pin string) (*t
 				if err := notify.SendTextReceivedNotification(request.Info.Alias, title, info.Preview, info.FileName); err != nil {
 					tool.DefaultLogger.Errorf("[Notify] Failed to send text_received notification: %v", err)
 				} else {
+					time.Sleep(1 * time.Second) // 1s to prevent flutter bug.
 					tool.DefaultLogger.Infof("[PrepareUpload] Text-only message from %s, returning 204 (no upload)", request.Info.Alias)
 				}
 				return nil, nil
