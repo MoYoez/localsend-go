@@ -16,26 +16,18 @@ type SessionContext struct {
 	Cancel context.CancelFunc
 }
 
-// SessionUploadStats tracks upload statistics for a session
-type SessionUploadStats struct {
-	TotalFiles    int
-	SuccessFiles  int
-	FailedFiles   int
-	FailedFileIds []string
-}
-
 var (
-	uploadSessionMu       sync.RWMutex
-	DefaultUploadFolder   = "uploads"
+	uploadSessionMu        sync.RWMutex
+	DefaultUploadFolder    = "uploads"
 	DoNotMakeSessionFolder bool // if true, save under upload folder only; same filename -> name-2.ext, name-3.ext, ...
-	uploadSessions      = ttlworker.NewCache[string, map[string]types.FileInfo](tool.DefaultTTL)
-	uploadValidated     = ttlworker.NewCache[string, bool](tool.DefaultTTL)
-	confirmRecvChans    = ttlworker.NewCache[string, chan types.ConfirmResult](tool.DefaultTTL)
-	v1Sessions          = ttlworker.NewCache[string, string](tool.DefaultTTL)
+	uploadSessions         = ttlworker.NewCache[string, map[string]types.FileInfo](tool.DefaultTTL)
+	uploadValidated        = ttlworker.NewCache[string, bool](tool.DefaultTTL)
+	confirmRecvChans       = ttlworker.NewCache[string, chan types.ConfirmResult](tool.DefaultTTL)
+	v1Sessions             = ttlworker.NewCache[string, string](tool.DefaultTTL)
 	// sessionContexts stores the context for each session to support cancellation
 	sessionContexts = ttlworker.NewCache[string, *SessionContext](tool.DefaultTTL)
 	// uploadStats tracks success/failure counts per session
-	uploadStats = ttlworker.NewCache[string, *SessionUploadStats](tool.DefaultTTL)
+	uploadStats = ttlworker.NewCache[string, *types.SessionUploadStats](tool.DefaultTTL)
 )
 
 func CacheUploadSession(sessionId string, files map[string]types.FileInfo) {
@@ -76,17 +68,17 @@ func RemoveUploadedFile(sessionId, fileId string) {
 func InitSessionStats(sessionId string, totalFiles int) {
 	uploadSessionMu.Lock()
 	defer uploadSessionMu.Unlock()
-	uploadStats.Set(sessionId, &SessionUploadStats{
+	uploadStats.Set(sessionId, &types.SessionUploadStats{
 		TotalFiles:    totalFiles,
 		SuccessFiles:  0,
 		FailedFiles:   0,
-		FailedFileIds: make([]string, 0),
+		FailedFileIds: nil,
 	})
 }
 
 // MarkFileUploadedAndCheckComplete marks a file as uploaded (success or failure) and returns
 // (remaining, isLast, stats) to help determine if all files are done
-func MarkFileUploadedAndCheckComplete(sessionId, fileId string, success bool) (remaining int, isLast bool, stats *SessionUploadStats) {
+func MarkFileUploadedAndCheckComplete(sessionId, fileId string, success bool) (remaining int, isLast bool, stats *types.SessionUploadStats) {
 	uploadSessionMu.Lock()
 	defer uploadSessionMu.Unlock()
 
@@ -98,9 +90,9 @@ func MarkFileUploadedAndCheckComplete(sessionId, fileId string, success bool) (r
 	// Update stats
 	sessionStats := uploadStats.Get(sessionId)
 	if sessionStats == nil {
-		sessionStats = &SessionUploadStats{
+		sessionStats = &types.SessionUploadStats{
 			TotalFiles:    len(files),
-			FailedFileIds: make([]string, 0),
+			FailedFileIds: nil,
 		}
 	}
 
@@ -128,7 +120,7 @@ func MarkFileUploadedAndCheckComplete(sessionId, fileId string, success bool) (r
 }
 
 // GetSessionStats returns the upload statistics for a session
-func GetSessionStats(sessionId string) *SessionUploadStats {
+func GetSessionStats(sessionId string) *types.SessionUploadStats {
 	uploadSessionMu.RLock()
 	defer uploadSessionMu.RUnlock()
 	return uploadStats.Get(sessionId)

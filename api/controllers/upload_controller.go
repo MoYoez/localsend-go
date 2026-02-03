@@ -225,7 +225,7 @@ func (ctrl *UploadController) HandleUploadV1Upload(c *gin.Context) {
 
 		// Send notification when all files are processed (even if some failed)
 		if isLast && stats != nil {
-			go func(sid string, stats *models.SessionUploadStats, remoteAddr string) {
+			go func(sid string, stats *types.SessionUploadStats, remoteAddr string) {
 				// remove session
 				models.RemoveV1Session(remoteAddr)
 				tool.DefaultLogger.Infof("[V1 Notify] Sending upload_end notification (all files processed): sessionId=%s, success=%d, failed=%d",
@@ -269,7 +269,7 @@ func (ctrl *UploadController) HandleUploadV1Upload(c *gin.Context) {
 	tool.DefaultLogger.Infof("[V1 Send] File completed: %s, remaining files: %d, isLast: %v", fileInfo.FileName, remaining, isLast)
 
 	if isLast && stats != nil {
-		go func(sid, fid string, fileInfo types.FileInfo, stats *models.SessionUploadStats) {
+		go func(sid, fid string, fileInfo types.FileInfo, stats *types.SessionUploadStats) {
 			tool.DefaultLogger.Infof("[V1 Notify] Sending upload_end notification (all files processed): sessionId=%s, success=%d, failed=%d",
 				sid, stats.SuccessFiles, stats.FailedFiles)
 			if err := notify.SendUploadNotification("upload_end", sid, fid, map[string]any{
@@ -325,7 +325,7 @@ func (ctrl *UploadController) HandleUpload(c *gin.Context) {
 		tool.DefaultLogger.Infof("[Upload] File failed: %s, remaining files: %d, isLast: %v", fileId, remaining, isLast)
 
 		if isLast && stats != nil {
-			go func(sid string, stats *models.SessionUploadStats) {
+			go func(sid string, stats *types.SessionUploadStats) {
 				tool.DefaultLogger.Infof("[Notify] Sending upload_end notification (all files processed): sessionId=%s, success=%d, failed=%d",
 					sid, stats.SuccessFiles, stats.FailedFiles)
 				if err := notify.SendUploadNotification("upload_end", sid, "", map[string]any{
@@ -366,7 +366,7 @@ func (ctrl *UploadController) HandleUpload(c *gin.Context) {
 	tool.DefaultLogger.Infof("[Upload] File completed: %s, remaining files: %d, isLast: %v", fileInfo.FileName, remaining, isLast)
 
 	if isLast && stats != nil {
-		go func(sid, fid string, fileInfo types.FileInfo, stats *models.SessionUploadStats) {
+		go func(sid, fid string, fileInfo types.FileInfo, stats *types.SessionUploadStats) {
 			tool.DefaultLogger.Infof("[Notify] Sending upload_end notification (all files processed): sessionId=%s, success=%d, failed=%d",
 				sid, stats.SuccessFiles, stats.FailedFiles)
 			if err := notify.SendUploadNotification("upload_end", sid, fid, map[string]any{
