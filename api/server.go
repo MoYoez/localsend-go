@@ -128,6 +128,7 @@ func (s *Server) setupRoutes() *gin.Engine {
 		self.GET("/get-network-interfaces", controllers.UserGetNetworkInterfaces) // Get network interfaces,used same as usergetNetwork Info
 		self.POST("/create-share-session", controllers.UserCreateShareSession)    // Create share session for download API
 		self.DELETE("/close-share-session", controllers.UserCloseShareSession)    // Close share session
+		self.GET("/create-qr-code", controllers.GenerateQRCode)                   // QR code PNG (same params as api.qrserver.com)
 	}
 
 	// Serve Next.js static export for download page at root (when Download enabled and web/out exists)
