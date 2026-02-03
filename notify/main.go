@@ -207,8 +207,8 @@ func SendSimpleNotification(title, message string) error {
 }
 
 // SendTextReceivedNotification sends a text-received notification (no upload session).
-// Used when prepare-upload is a single text/plain file with preview; receiver shows dialog and returns 204.
-func SendTextReceivedNotification(from, title, content, fileName string) error {
+// Used when prepare-upload is a single text/plain file with preview; receiver shows dialog and returns 204 after user dismisses.
+func SendTextReceivedNotification(from, title, content, fileName, sessionId string) error {
 	notification := &types.Notification{
 		Type:    types.NotifyTypeTextReceived,
 		Title:   title,
@@ -218,6 +218,7 @@ func SendTextReceivedNotification(from, title, content, fileName string) error {
 			"title":     title,
 			"content":   content,
 			"fileName":  fileName,
+			"sessionId": sessionId,
 		},
 	}
 	return SendNotification(notification, DefaultUnixSocketPath)

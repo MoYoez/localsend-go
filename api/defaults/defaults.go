@@ -56,7 +56,7 @@ func DefaultOnPrepareUpload(request *types.PrepareUploadRequest, pin string) (*t
 		return nil, fmt.Errorf("invalid PIN")
 	}
 
-	// Text-only message: single file, text/plain, with preview — show dialog and return 204 (no upload)
+	// Text-only message: single file, text/plain, with preview — show dialog, wait for user dismiss, then return 204 (no upload)
 	if len(request.Files) == 1 {
 		for _, info := range request.Files {
 			if strings.TrimSpace(strings.ToLower(info.FileType)) == "text/plain" && info.Preview != "" {
@@ -64,11 +64,20 @@ func DefaultOnPrepareUpload(request *types.PrepareUploadRequest, pin string) (*t
 				if request.Info.Alias != "" {
 					title = fmt.Sprintf("From %s", request.Info.Alias)
 				}
-				if err := notify.SendTextReceivedNotification(request.Info.Alias, title, info.Preview, info.FileName); err != nil {
+				textDismissSessionId := tool.GenerateRandomUUID()
+				dismissCh := make(chan struct{}, 1)
+				models.SetTextReceivedDismissChannel(textDismissSessionId, dismissCh)
+				defer models.DeleteTextReceivedDismissChannel(textDismissSessionId)
+				if err := notify.SendTextReceivedNotification(request.Info.Alias, title, info.Preview, info.FileName, textDismissSessionId); err != nil {
 					tool.DefaultLogger.Errorf("[Notify] Failed to send text_received notification: %v", err)
-				} else {
-					time.Sleep(1 * time.Second) // 1s to prevent flutter bug.
-					tool.DefaultLogger.Infof("[PrepareUpload] Text-only message from %s, returning 204 (no upload)", request.Info.Alias)
+					return nil, nil
+				}
+				dismissTimeout := 2 * time.Minute
+				select {
+				case <-dismissCh:
+					tool.DefaultLogger.Infof("[PrepareUpload] Text-only message from %s dismissed by user, returning 204 (no upload)", request.Info.Alias)
+				case <-time.After(dismissTimeout):
+					tool.DefaultLogger.Infof("[PrepareUpload] Text-only message from %s dismiss timeout, returning 204 (no upload)", request.Info.Alias)
 				}
 				return nil, nil
 			}

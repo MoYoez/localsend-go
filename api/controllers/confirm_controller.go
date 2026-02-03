@@ -46,6 +46,28 @@ func UserConfirmRecv(c *gin.Context) {
 	}
 }
 
+// UserTextReceivedDismiss handles text-received modal dismiss (user closed or copied).
+// GET /api/self/v1/text-received-dismiss
+func UserTextReceivedDismiss(c *gin.Context) {
+	sessionId := strings.TrimSpace(c.Query("sessionId"))
+	if sessionId == "" {
+		c.JSON(http.StatusBadRequest, tool.FastReturnError("Missing required parameter: sessionId"))
+		return
+	}
+	dismissCh, ok := models.GetTextReceivedDismissChannel(sessionId)
+	if !ok {
+		c.JSON(http.StatusNotFound, tool.FastReturnError("Session not found or expired"))
+		return
+	}
+	select {
+	case dismissCh <- struct{}{}:
+		models.DeleteTextReceivedDismissChannel(sessionId)
+		c.JSON(http.StatusOK, tool.FastReturnSuccess())
+	default:
+		c.JSON(http.StatusConflict, tool.FastReturnError("Dismiss channel busy"))
+	}
+}
+
 // UserConfirmDownload handles confirm download request
 // GET /api/self/v1/confirm-download
 func UserConfirmDownload(c *gin.Context) {

@@ -119,6 +119,7 @@ func (s *Server) setupRoutes() *gin.Engine {
 		self.POST("/upload", controllers.UserUpload)                   // Actual upload endpoint
 		self.POST("/upload-batch", controllers.UserUploadBatch)        // Batch upload endpoint (supports file:/// protocol)
 		self.GET("/confirm-recv", controllers.UserConfirmRecv)         // Confirm recv endpoint
+		self.GET("/text-received-dismiss", controllers.UserTextReceivedDismiss) // Text received modal dismiss
 		self.GET("/confirm-download", controllers.UserConfirmDownload) // Confirm download endpoint
 		self.POST("/cancel", controllers.UserCancelUpload)             // Cancel upload endpoint (sender side)
 		self.GET("/get-image", controllers.UserGetImage)

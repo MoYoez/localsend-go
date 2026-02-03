@@ -17,6 +17,7 @@ var (
 	uploadSessions         = ttlworker.NewCache[string, map[string]types.FileInfo](tool.DefaultTTL)
 	uploadValidated        = ttlworker.NewCache[string, bool](tool.DefaultTTL)
 	confirmRecvChans       = ttlworker.NewCache[string, chan types.ConfirmResult](tool.DefaultTTL)
+	textReceivedDismissChans = ttlworker.NewCache[string, chan struct{}](tool.DefaultTTL)
 	v1Sessions             = ttlworker.NewCache[string, string](tool.DefaultTTL)
 	// sessionContexts stores the context for each session to support cancellation
 	sessionContexts = ttlworker.NewCache[string, *types.SessionContext](tool.DefaultTTL)
@@ -212,6 +213,28 @@ func DeleteConfirmRecvChannel(sessionId string) {
 	uploadSessionMu.Lock()
 	defer uploadSessionMu.Unlock()
 	confirmRecvChans.Delete(sessionId)
+}
+
+func SetTextReceivedDismissChannel(sessionId string, ch chan struct{}) {
+	uploadSessionMu.Lock()
+	defer uploadSessionMu.Unlock()
+	textReceivedDismissChans.Set(sessionId, ch)
+}
+
+func GetTextReceivedDismissChannel(sessionId string) (chan struct{}, bool) {
+	uploadSessionMu.RLock()
+	defer uploadSessionMu.RUnlock()
+	ch := textReceivedDismissChans.Get(sessionId)
+	if ch == nil {
+		return nil, false
+	}
+	return ch, true
+}
+
+func DeleteTextReceivedDismissChannel(sessionId string) {
+	uploadSessionMu.Lock()
+	defer uploadSessionMu.Unlock()
+	textReceivedDismissChans.Delete(sessionId)
 }
 
 func GetUploadSessionFiles(sessionId string) (map[string]types.FileInfo, bool) {
