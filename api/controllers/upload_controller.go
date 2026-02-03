@@ -88,11 +88,11 @@ func (ctrl *UploadController) HandlePrepareUpload(c *gin.Context) {
 			tool.DefaultLogger.Infof("[Notify] Sending upload_start notification: sessionId=%s, totalFiles=%d",
 				sessionId, totalFiles)
 			if err := notify.SendUploadNotification(types.NotifyTypeUploadStart, sessionId, "", map[string]any{
-				"totalFiles":            totalFiles,
-				"totalSize":            totalSize,
-				"files":                files,
+				"totalFiles":             totalFiles,
+				"totalSize":              totalSize,
+				"files":                  files,
 				"doNotMakeSessionFolder": models.DoNotMakeSessionFolder,
-				"uploadFolder":         models.DefaultUploadFolder,
+				"uploadFolder":           models.DefaultUploadFolder,
 			}); err != nil {
 				tool.DefaultLogger.Errorf("[Notify] Failed to send upload_start notification: %v", err)
 			} else {
@@ -173,11 +173,11 @@ func (ctrl *UploadController) HandlePrepareV1Upload(c *gin.Context) {
 			tool.DefaultLogger.Infof("[V1 Notify] Sending upload_start notification: sessionId=%s, totalFiles=%d",
 				sessionId, totalFiles)
 			if err := notify.SendUploadNotification(types.NotifyTypeUploadStart, sessionId, "", map[string]any{
-				"totalFiles":            totalFiles,
-				"totalSize":            totalSize,
-				"files":                files,
+				"totalFiles":             totalFiles,
+				"totalSize":              totalSize,
+				"files":                  files,
 				"doNotMakeSessionFolder": models.DoNotMakeSessionFolder,
-				"uploadFolder":         models.DefaultUploadFolder,
+				"uploadFolder":           models.DefaultUploadFolder,
 			}); err != nil {
 				tool.DefaultLogger.Errorf("[V1 Notify] Failed to send upload_start notification: %v", err)
 			} else {
@@ -231,17 +231,19 @@ func (ctrl *UploadController) HandleUploadV1Upload(c *gin.Context) {
 		if isLast && stats != nil {
 			go func(sid string, stats *types.SessionUploadStats, remoteAddr string) {
 				savePaths := models.GetSessionSavePaths(sid)
+				savedFileNames := tool.BuildSavedFileNames(savePaths)
 				models.RemoveV1Session(remoteAddr)
 				tool.DefaultLogger.Infof("[V1 Notify] Sending upload_end notification (all files processed): sessionId=%s, success=%d, failed=%d",
 					sid, stats.SuccessFiles, stats.FailedFiles)
 				data := map[string]any{
-					"totalFiles":            stats.TotalFiles,
-					"successFiles":          stats.SuccessFiles,
-					"failedFiles":           stats.FailedFiles,
-					"failedFileIds":         stats.FailedFileIds,
+					"totalFiles":             stats.TotalFiles,
+					"successFiles":           stats.SuccessFiles,
+					"failedFiles":            stats.FailedFiles,
+					"failedFileIds":          stats.FailedFileIds,
 					"doNotMakeSessionFolder": models.DoNotMakeSessionFolder,
-					"uploadFolder":          models.DefaultUploadFolder,
-					"savePaths":             savePaths,
+					"uploadFolder":           models.DefaultUploadFolder,
+					"savePaths":              savePaths,
+					"savedFileNames":         savedFileNames,
 				}
 				if err := notify.SendUploadNotification(types.NotifyTypeUploadEnd, sid, "", data); err != nil {
 					tool.DefaultLogger.Errorf("[V1 Notify] Failed to send upload_end notification: %v", err)
@@ -279,6 +281,7 @@ func (ctrl *UploadController) HandleUploadV1Upload(c *gin.Context) {
 	if isLast && stats != nil {
 		go func(sid, fid string, fileInfo types.FileInfo, stats *types.SessionUploadStats) {
 			savePaths := models.GetSessionSavePaths(sid)
+			savedFileNames := tool.BuildSavedFileNames(savePaths)
 			var savePath string
 			if savePaths != nil {
 				savePath = savePaths[fid]
@@ -287,15 +290,16 @@ func (ctrl *UploadController) HandleUploadV1Upload(c *gin.Context) {
 				sid, stats.SuccessFiles, stats.FailedFiles)
 			data := map[string]any{
 				"fileName":               fileInfo.FileName,
-				"fileType":                fileInfo.FileType,
-				"totalFiles":              stats.TotalFiles,
-				"successFiles":            stats.SuccessFiles,
-				"failedFiles":             stats.FailedFiles,
-				"failedFileIds":           stats.FailedFileIds,
-				"doNotMakeSessionFolder":  models.DoNotMakeSessionFolder,
-				"uploadFolder":            models.DefaultUploadFolder,
-				"savePath":                savePath,
-				"savePaths":               savePaths,
+				"fileType":               fileInfo.FileType,
+				"totalFiles":             stats.TotalFiles,
+				"successFiles":           stats.SuccessFiles,
+				"failedFiles":            stats.FailedFiles,
+				"failedFileIds":          stats.FailedFileIds,
+				"doNotMakeSessionFolder": models.DoNotMakeSessionFolder,
+				"uploadFolder":           models.DefaultUploadFolder,
+				"savePath":               savePath,
+				"savePaths":              savePaths,
+				"savedFileNames":         savedFileNames,
 			}
 			if err := notify.SendUploadNotification(types.NotifyTypeUploadEnd, sid, fid, data); err != nil {
 				tool.DefaultLogger.Errorf("[V1 Notify] Failed to send upload_end notification: %v", err)
@@ -345,16 +349,18 @@ func (ctrl *UploadController) HandleUpload(c *gin.Context) {
 		if isLast && stats != nil {
 			go func(sid string, stats *types.SessionUploadStats) {
 				savePaths := models.GetSessionSavePaths(sid)
+				savedFileNames := tool.BuildSavedFileNames(savePaths)
 				tool.DefaultLogger.Infof("[Notify] Sending upload_end notification (all files processed): sessionId=%s, success=%d, failed=%d",
 					sid, stats.SuccessFiles, stats.FailedFiles)
 				data := map[string]any{
-					"totalFiles":            stats.TotalFiles,
-					"successFiles":          stats.SuccessFiles,
-					"failedFiles":           stats.FailedFiles,
-					"failedFileIds":         stats.FailedFileIds,
+					"totalFiles":             stats.TotalFiles,
+					"successFiles":           stats.SuccessFiles,
+					"failedFiles":            stats.FailedFiles,
+					"failedFileIds":          stats.FailedFileIds,
 					"doNotMakeSessionFolder": models.DoNotMakeSessionFolder,
-					"uploadFolder":          models.DefaultUploadFolder,
-					"savePaths":             savePaths,
+					"uploadFolder":           models.DefaultUploadFolder,
+					"savePaths":              savePaths,
+					"savedFileNames":         savedFileNames,
 				}
 				if err := notify.SendUploadNotification(types.NotifyTypeUploadEnd, sid, "", data); err != nil {
 					tool.DefaultLogger.Errorf("[Notify] Failed to send upload_end notification: %v", err)
@@ -391,6 +397,7 @@ func (ctrl *UploadController) HandleUpload(c *gin.Context) {
 	if isLast && stats != nil {
 		go func(sid, fid string, fileInfo types.FileInfo, stats *types.SessionUploadStats) {
 			savePaths := models.GetSessionSavePaths(sid)
+			savedFileNames := tool.BuildSavedFileNames(savePaths)
 			var savePath string
 			if savePaths != nil {
 				savePath = savePaths[fid]
@@ -399,15 +406,16 @@ func (ctrl *UploadController) HandleUpload(c *gin.Context) {
 				sid, stats.SuccessFiles, stats.FailedFiles)
 			data := map[string]any{
 				"fileName":               fileInfo.FileName,
-				"fileType":                fileInfo.FileType,
-				"totalFiles":              stats.TotalFiles,
-				"successFiles":            stats.SuccessFiles,
-				"failedFiles":             stats.FailedFiles,
-				"failedFileIds":           stats.FailedFileIds,
-				"doNotMakeSessionFolder":  models.DoNotMakeSessionFolder,
-				"uploadFolder":            models.DefaultUploadFolder,
-				"savePath":                savePath,
-				"savePaths":               savePaths,
+				"fileType":               fileInfo.FileType,
+				"totalFiles":             stats.TotalFiles,
+				"successFiles":           stats.SuccessFiles,
+				"failedFiles":            stats.FailedFiles,
+				"failedFileIds":          stats.FailedFileIds,
+				"doNotMakeSessionFolder": models.DoNotMakeSessionFolder,
+				"uploadFolder":           models.DefaultUploadFolder,
+				"savePath":               savePath,
+				"savePaths":              savePaths,
+				"savedFileNames":         savedFileNames,
 			}
 			if err := notify.SendUploadNotification(types.NotifyTypeUploadEnd, sid, fid, data); err != nil {
 				tool.DefaultLogger.Errorf("[Notify] Failed to send upload_end notification: %v", err)
