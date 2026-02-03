@@ -29,7 +29,7 @@ func CallbackMulticastMessageUsingTCP(targetAddr *net.UDPAddr, self *types.Callb
 		return err
 	}
 	// Try sending register request via HTTP
-	if sendErr := sendRegisterRequest(tool.BytesToString(url), tool.BytesToString(payload)); sendErr != nil {
+	if sendErr := sendRegisterRequest(url, tool.BytesToString(payload)); sendErr != nil {
 		// debug what msg sent
 		tool.DefaultLogger.Warnf("Failed to send register request via HTTP: %v. Falling back to UDP multicast.", sendErr)
 		// Fallback: Respond using UDP multicast (announce=false)

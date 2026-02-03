@@ -23,7 +23,7 @@ func scanOneIPHTTP(targetIP string, payloadBytes []byte, httpClient *http.Client
 		return false
 	}
 	protocol := "https"
-	urlStr := tool.BuildRegisterUrlWithParams(protocol, targetIP, multcastPort)
+	urlStr := tool.BuildScanOnceRegisterUrl(protocol, targetIP, multcastPort)
 	req, err := tool.NewHTTPReqWithApplication(http.NewRequest("POST", urlStr, bytes.NewReader(payloadBytes)))
 	if err != nil {
 		tool.DefaultLogger.Debugf("scanOneIPHTTP: failed to create request for %s: %v", urlStr, err)
@@ -36,7 +36,7 @@ func scanOneIPHTTP(targetIP string, payloadBytes []byte, httpClient *http.Client
 			tool.DefaultLogger.Warnf("Detected error, trying to use http protocol: %v", err.Error())
 			protocol = "http"
 			globalProtocol = "http"
-			urlStr = tool.BuildRegisterUrlWithParams(protocol, targetIP, multcastPort)
+			urlStr = tool.BuildScanOnceRegisterUrl(protocol, targetIP, multcastPort)
 			req, err = tool.NewHTTPReqWithApplication(http.NewRequest("POST", urlStr, bytes.NewReader(payloadBytes)))
 			if err != nil {
 				return false

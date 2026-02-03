@@ -9,6 +9,10 @@ import (
 
 var favoritesMu sync.RWMutex
 
+type FavoriteDevicesYamlFileConfig struct {
+	FavoriteDevices []FavoriteDeviceEntry `yaml:"favoriteDevices"`
+}
+
 // AddFavorite adds a device to favorites by fingerprint and alias.
 // If the fingerprint already exists, the alias will be updated.
 func AddFavorite(fingerprint, alias string) error {
@@ -84,12 +88,9 @@ func IsFavorite(fingerprint string) bool {
 		}
 		return false
 	}
+	var FavoriteDevicesYamlFileConfig FavoriteDevicesYamlFileConfig
 
-	// Parse only the favoriteDevices field
-	var cfg struct {
-		FavoriteDevices []FavoriteDeviceEntry `yaml:"favoriteDevices"`
-	}
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	if err := yaml.Unmarshal(data, &FavoriteDevicesYamlFileConfig); err != nil {
 		DefaultLogger.Debugf("IsFavorite: failed to parse config file: %v, falling back to memory", err)
 		// Fallback to in-memory check
 		for _, fav := range CurrentConfig.FavoriteDevices {
@@ -101,7 +102,7 @@ func IsFavorite(fingerprint string) bool {
 	}
 
 	// Check if fingerprint exists in favorites
-	for _, fav := range cfg.FavoriteDevices {
+	for _, fav := range FavoriteDevicesYamlFileConfig.FavoriteDevices {
 		if fav.Fingerprint == fingerprint {
 			return true
 		}

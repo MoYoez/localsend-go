@@ -11,7 +11,7 @@ import (
 	"github.com/moyoez/localsend-base-protocol-golang/types"
 )
 
-// listenOnInterface listens for multicast messages on a specific network interface.
+// listenOnInterface listens for multicast messages on a specific network interface. (UDP4)
 func listenOnInterface(iface *net.Interface, addr *net.UDPAddr, self *types.VersionMessage) {
 	interfaceName := iface.Name
 

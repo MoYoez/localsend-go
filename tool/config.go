@@ -77,14 +77,13 @@ func defaultConfig() AppConfig {
 		Download:              false,           // document said that  default is false, i dont know how to use it, so make it default.
 		Announce:              true,
 		AutoSaveFromFavorites: false,
-		FavoriteDevices:       []FavoriteDeviceEntry{},
+		FavoriteDevices:       []FavoriteDeviceEntry{}, // I dont like yaml btw
 	}
 }
 
 // generateRandomFingerprint generates a random 32-character fingerprint
 func generateRandomFingerprintForConfig() string {
-	uuid := GenerateRandomUUID()
-	return strings.ReplaceAll(uuid, "-", "")
+	return strings.ReplaceAll(GenerateRandomUUID(), "-", "")
 }
 
 func LoadConfig(path string) (AppConfig, error) {
@@ -136,7 +135,6 @@ func LoadConfig(path string) (AppConfig, error) {
 		}
 	} else {
 		// HTTP mode: use random fingerprint if not set
-		// Keep certificate data for seamless switch back to HTTPS
 		if cfg.Fingerprint == "" {
 			cfg.Fingerprint = generateRandomFingerprintForConfig()
 			DefaultLogger.Infof("HTTP mode: generated random fingerprint")

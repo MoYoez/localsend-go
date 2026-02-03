@@ -149,7 +149,6 @@ func NewHTTPReqWithApplication(req *http.Request, err error) (*http.Request, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	return req, nil
-
 }
 
 // IsAddrNotAvailableError detects address-not-available errors across platforms.

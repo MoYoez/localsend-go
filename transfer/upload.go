@@ -37,11 +37,10 @@ func UploadFileWithContext(ctx context.Context, targetAddr *net.UDPAddr, remote 
 	default:
 	}
 
-	urlBytes, err := tool.BuildUploadURL(targetAddr, remote, sessionId, fileId, token)
+	url, err := tool.BuildUploadURL(targetAddr, remote, sessionId, fileId, token)
 	if err != nil {
 		return fmt.Errorf("failed to build upload URL: %v", err)
 	}
-	url := tool.BytesToString(urlBytes)
 
 	// Create request with context for cancellation support
 	req, err := http.NewRequestWithContext(ctx, "POST", url, data)

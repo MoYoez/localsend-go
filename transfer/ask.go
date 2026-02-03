@@ -30,11 +30,10 @@ func ReadyToUploadTo(targetAddr *net.UDPAddr, remote *types.VersionMessage, requ
 		return nil, fmt.Errorf("invalid parameters: targetAddr, remote, and request must not be nil")
 	}
 
-	urlBytes, err := tool.BuildPrepareUploadURL(targetAddr, remote, pin)
+	url, err := tool.BuildPrepareUploadURL(targetAddr, remote, pin)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build prepare-upload URL: %v", err)
 	}
-	url := tool.BytesToString(urlBytes)
 
 	payload, err := sonic.Marshal(request)
 	if err != nil {
