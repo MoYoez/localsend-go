@@ -1,4 +1,4 @@
-module github.com/moyoez/localsend-base-protocol-golang
+module github.com/moyoez/localsend-go
 
 go 1.24.4
 
@@ -8,6 +8,8 @@ require (
 	github.com/charmbracelet/log v0.4.2
 	github.com/gin-gonic/gin v1.10.0
 	github.com/google/uuid v1.6.0
+	github.com/prometheus-community/pro-bing v0.7.0
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -43,10 +45,11 @@ require (
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/arch v0.23.0 // indirect
-	golang.org/x/crypto v0.23.0 // indirect
+	golang.org/x/crypto v0.36.0 // indirect
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d // indirect
-	golang.org/x/net v0.25.0 // indirect
+	golang.org/x/net v0.38.0 // indirect
+	golang.org/x/sync v0.13.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
-	golang.org/x/text v0.15.0 // indirect
+	golang.org/x/text v0.23.0 // indirect
 	google.golang.org/protobuf v1.34.1 // indirect
 )

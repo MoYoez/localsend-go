@@ -6,35 +6,25 @@ import (
 	"sync"
 
 	ttlworker "github.com/FloatTech/ttl"
-	"github.com/moyoez/localsend-base-protocol-golang/tool"
-	"github.com/moyoez/localsend-base-protocol-golang/types"
+	"github.com/moyoez/localsend-go/tool"
+	"github.com/moyoez/localsend-go/types"
 )
 
-// SessionContext holds the context and cancel function for a session
-type SessionContext struct {
-	Ctx    context.Context
-	Cancel context.CancelFunc
-}
-
-// SessionUploadStats tracks upload statistics for a session
-type SessionUploadStats struct {
-	TotalFiles    int
-	SuccessFiles  int
-	FailedFiles   int
-	FailedFileIds []string
-}
-
 var (
-	uploadSessionMu     sync.RWMutex
-	DefaultUploadFolder = "uploads"
-	uploadSessions      = ttlworker.NewCache[string, map[string]types.FileInfo](tool.DefaultTTL)
-	uploadValidated     = ttlworker.NewCache[string, bool](tool.DefaultTTL)
-	confirmRecvChans    = ttlworker.NewCache[string, chan types.ConfirmResult](tool.DefaultTTL)
-	v1Sessions          = ttlworker.NewCache[string, string](tool.DefaultTTL)
+	uploadSessionMu        sync.RWMutex
+	DefaultUploadFolder    = "uploads"
+	DoNotMakeSessionFolder bool // if true, save under upload folder only; same filename -> name-2.ext, name-3.ext, ...
+	uploadSessions         = ttlworker.NewCache[string, map[string]types.FileInfo](tool.DefaultTTL)
+	uploadValidated        = ttlworker.NewCache[string, bool](tool.DefaultTTL)
+	confirmRecvChans       = ttlworker.NewCache[string, chan types.ConfirmResult](tool.DefaultTTL)
+	textReceivedDismissChans = ttlworker.NewCache[string, chan struct{}](tool.DefaultTTL)
+	v1Sessions             = ttlworker.NewCache[string, string](tool.DefaultTTL)
 	// sessionContexts stores the context for each session to support cancellation
-	sessionContexts = ttlworker.NewCache[string, *SessionContext](tool.DefaultTTL)
+	sessionContexts = ttlworker.NewCache[string, *types.SessionContext](tool.DefaultTTL)
 	// uploadStats tracks success/failure counts per session
-	uploadStats = ttlworker.NewCache[string, *SessionUploadStats](tool.DefaultTTL)
+	uploadStats = ttlworker.NewCache[string, *types.SessionUploadStats](tool.DefaultTTL)
+	// fileSavePaths stores actual save path per (sessionId, fileId) for notifications
+	fileSavePaths = ttlworker.NewCache[string, map[string]string](tool.DefaultTTL)
 )
 
 func CacheUploadSession(sessionId string, files map[string]types.FileInfo) {
@@ -75,17 +65,17 @@ func RemoveUploadedFile(sessionId, fileId string) {
 func InitSessionStats(sessionId string, totalFiles int) {
 	uploadSessionMu.Lock()
 	defer uploadSessionMu.Unlock()
-	uploadStats.Set(sessionId, &SessionUploadStats{
+	uploadStats.Set(sessionId, &types.SessionUploadStats{
 		TotalFiles:    totalFiles,
 		SuccessFiles:  0,
 		FailedFiles:   0,
-		FailedFileIds: make([]string, 0),
+		FailedFileIds: nil,
 	})
 }
 
 // MarkFileUploadedAndCheckComplete marks a file as uploaded (success or failure) and returns
 // (remaining, isLast, stats) to help determine if all files are done
-func MarkFileUploadedAndCheckComplete(sessionId, fileId string, success bool) (remaining int, isLast bool, stats *SessionUploadStats) {
+func MarkFileUploadedAndCheckComplete(sessionId, fileId string, success bool) (remaining int, isLast bool, stats *types.SessionUploadStats) {
 	uploadSessionMu.Lock()
 	defer uploadSessionMu.Unlock()
 
@@ -97,9 +87,9 @@ func MarkFileUploadedAndCheckComplete(sessionId, fileId string, success bool) (r
 	// Update stats
 	sessionStats := uploadStats.Get(sessionId)
 	if sessionStats == nil {
-		sessionStats = &SessionUploadStats{
+		sessionStats = &types.SessionUploadStats{
 			TotalFiles:    len(files),
-			FailedFileIds: make([]string, 0),
+			FailedFileIds: nil,
 		}
 	}
 
@@ -127,10 +117,47 @@ func MarkFileUploadedAndCheckComplete(sessionId, fileId string, success bool) (r
 }
 
 // GetSessionStats returns the upload statistics for a session
-func GetSessionStats(sessionId string) *SessionUploadStats {
+func GetSessionStats(sessionId string) *types.SessionUploadStats {
 	uploadSessionMu.RLock()
 	defer uploadSessionMu.RUnlock()
 	return uploadStats.Get(sessionId)
+}
+
+// SetFileSavePath stores the actual save path for a file (used by notifications when DoNotMakeSessionFolder or name collision).
+func SetFileSavePath(sessionId, fileId, savePath string) {
+	uploadSessionMu.Lock()
+	defer uploadSessionMu.Unlock()
+	m := fileSavePaths.Get(sessionId)
+	if m == nil {
+		m = make(map[string]string)
+		fileSavePaths.Set(sessionId, m)
+	}
+	m[fileId] = savePath
+}
+
+// GetFileSavePath returns the stored save path for a file, if any.
+func GetFileSavePath(sessionId, fileId string) (string, bool) {
+	uploadSessionMu.RLock()
+	defer uploadSessionMu.RUnlock()
+	m := fileSavePaths.Get(sessionId)
+	if m == nil {
+		return "", false
+	}
+	path, ok := m[fileId]
+	return path, ok
+}
+
+// GetSessionSavePaths returns a copy of all fileId -> savePath for the session (for upload_end notification).
+func GetSessionSavePaths(sessionId string) map[string]string {
+	uploadSessionMu.RLock()
+	defer uploadSessionMu.RUnlock()
+	m := fileSavePaths.Get(sessionId)
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(m))
+	maps.Copy(out, m)
+	return out
 }
 
 // CleanupSessionStats removes the upload statistics for a session
@@ -146,6 +173,7 @@ func RemoveUploadSession(sessionId string) {
 	uploadSessions.Delete(sessionId)
 	uploadValidated.Delete(sessionId)
 	confirmRecvChans.Delete(sessionId)
+	fileSavePaths.Delete(sessionId)
 	// Cancel the session context to interrupt ongoing uploads
 	if sessCtx := sessionContexts.Get(sessionId); sessCtx != nil {
 		sessCtx.Cancel()
@@ -187,6 +215,28 @@ func DeleteConfirmRecvChannel(sessionId string) {
 	confirmRecvChans.Delete(sessionId)
 }
 
+func SetTextReceivedDismissChannel(sessionId string, ch chan struct{}) {
+	uploadSessionMu.Lock()
+	defer uploadSessionMu.Unlock()
+	textReceivedDismissChans.Set(sessionId, ch)
+}
+
+func GetTextReceivedDismissChannel(sessionId string) (chan struct{}, bool) {
+	uploadSessionMu.RLock()
+	defer uploadSessionMu.RUnlock()
+	ch := textReceivedDismissChans.Get(sessionId)
+	if ch == nil {
+		return nil, false
+	}
+	return ch, true
+}
+
+func DeleteTextReceivedDismissChannel(sessionId string) {
+	uploadSessionMu.Lock()
+	defer uploadSessionMu.Unlock()
+	textReceivedDismissChans.Delete(sessionId)
+}
+
 func GetUploadSessionFiles(sessionId string) (map[string]types.FileInfo, bool) {
 	uploadSessionMu.RLock()
 	defer uploadSessionMu.RUnlock()
@@ -225,7 +275,7 @@ func CreateSessionContext(sessionId string) context.Context {
 	uploadSessionMu.Lock()
 	defer uploadSessionMu.Unlock()
 	ctx, cancel := context.WithCancel(context.Background())
-	sessionContexts.Set(sessionId, &SessionContext{
+	sessionContexts.Set(sessionId, &types.SessionContext{
 		Ctx:    ctx,
 		Cancel: cancel,
 	})

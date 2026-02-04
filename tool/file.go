@@ -10,9 +10,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
-	"github.com/moyoez/localsend-base-protocol-golang/types"
+	"github.com/moyoez/localsend-go/types"
 )
 
 // processFileInput processes a FileInput and fills missing information from fileUrl if provided
@@ -294,4 +295,22 @@ func ProcessPathInput(path string, calculateSHA bool) (map[string]*types.FileInp
 
 	// It's a directory, recursively collect all files
 	return ProcessFolderForUpload(path, calculateSHA)
+}
+
+// BuildSavedFileNames returns an ordered slice of basenames from savePaths (fileId -> full path).
+// Order is deterministic by fileId for stable notification payload.
+func BuildSavedFileNames(savePaths map[string]string) []any {
+	if len(savePaths) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(savePaths))
+	for id := range savePaths {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := make([]any, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, filepath.Base(savePaths[id]))
+	}
+	return out
 }
