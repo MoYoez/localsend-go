@@ -186,6 +186,9 @@ func SendUploadNotification(eventType, sessionId, fileId string, fileInfo map[st
 		if names, ok := notification.Data["savedFileNames"].([]string); ok && len(names) > MaxNotifyFiles {
 			notification.Data["savedFileNames"] = names[:MaxNotifyFiles]
 		}
+		if namesAny, ok := notification.Data["savedFileNames"].([]any); ok && len(namesAny) > MaxNotifyFiles {
+			notification.Data["savedFileNames"] = namesAny[:MaxNotifyFiles]
+		}
 		if paths, ok := notification.Data["savePaths"].(map[string]string); ok && len(paths) > MaxNotifyFiles {
 			truncated := make(map[string]string, MaxNotifyFiles)
 			n := 0
@@ -227,6 +230,20 @@ func SendUploadNotification(eventType, sessionId, fileId string, fileInfo map[st
 				}
 			}
 			notification.Data["savedFileNames"] = names
+		}
+		if namesAny, ok := notification.Data["savedFileNames"].([]any); ok {
+			if len(namesAny) > MaxNotifyFilesUploadEnd {
+				namesAny = namesAny[:MaxNotifyFilesUploadEnd]
+			}
+			out := make([]any, len(namesAny))
+			for i, v := range namesAny {
+				if s, ok := v.(string); ok && len(s) > MaxNotifyFileNameLen {
+					out[i] = s[:MaxNotifyFileNameLen] + "..."
+				} else {
+					out[i] = v
+				}
+			}
+			notification.Data["savedFileNames"] = out
 		}
 		if ids, ok := notification.Data["failedFileIds"].([]string); ok && len(ids) > MaxNotifyFilesUploadEnd {
 			notification.Data["failedFileIds"] = ids[:MaxNotifyFilesUploadEnd]
