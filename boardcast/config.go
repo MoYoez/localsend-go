@@ -17,8 +17,8 @@ const (
 	defaultMultcastPort    = 53317 // UDP & HTTP
 	// httpScanConcurrencyLimit limits the number of concurrent HTTP scan goroutines
 	httpScanConcurrencyLimit = 25
-	// tcpProbeTimeout is the timeout for TCP port probe (reduced for faster scan-now)
-	tcpProbeTimeout = 200 * time.Millisecond
+	// icmpProbeTimeout is the timeout for ICMP echo probe (host reachability before HTTP register)
+	icmpProbeTimeout = 200 * time.Millisecond
 )
 
 var (

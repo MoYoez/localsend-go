@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/moyoez/localsend-go/types"
+	probing "github.com/prometheus-community/pro-bing"
 )
 
 // UDP4 unsupport multicast
@@ -131,8 +132,37 @@ func GenerateNetworkIPs(ipnet *net.IPNet) []string {
 	return ips
 }
 
-// quickTCPProbe checks if a port is open using a fast TCP connection attempt.
+// QuickICMPProbe checks if a host is reachable using ICMP echo (ping).
+// Returns true if the host replies within timeout, false otherwise.
+// Uses github.com/prometheus-community/pro-bing: on Linux uses unprivileged UDP ping by default
+// (see net.ipv4.ping_group_range); call pinger.SetPrivileged(true) for raw ICMP if needed.
+func QuickICMPProbe(ip string, timeout time.Duration) bool {
+	if net.ParseIP(ip) == nil {
+		return false
+	}
+	pinger, err := probing.NewPinger(ip)
+	if err != nil {
+		DefaultLogger.Debugf("QuickICMPProbe: NewPinger %s: %v", ip, err)
+		return false
+	}
+	pinger.SetPrivileged(true)
+	pinger.Count = 1
+	pinger.Timeout = timeout // always 1s
+	pinger.SetNetwork("ip4")
+	if err := pinger.Run(); err != nil {
+		DefaultLogger.Debugf("QuickICMPProbe: Run %s: %v", ip, err)
+		return false
+	}
+	ok := pinger.Statistics().PacketsRecv >= 1
+	if ok {
+		DefaultLogger.Debugf("QuickICMPProbe: %s replied", ip)
+	}
+	return ok
+}
+
+// QuickTCPProbe checks if a port is open using a fast TCP connection attempt.
 // Returns true if the port is open, false otherwise.
+// Deprecated: Prefer QuickICMPProbe for host reachability (e.g. Steam Deck).
 func QuickTCPProbe(ip string, port int, timeout time.Duration) bool {
 	addr := net.JoinHostPort(ip, strconv.Itoa(port))
 	conn, err := net.DialTimeout("tcp", addr, timeout)

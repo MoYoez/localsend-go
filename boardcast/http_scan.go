@@ -15,10 +15,10 @@ import (
 	"github.com/moyoez/localsend-go/types"
 )
 
-// scanOneIPHTTP performs TCP probe, POST register (https then http on EOF), parses response and stores device via share.SetUserScanCurrent.
+// scanOneIPHTTP performs ICMP probe (host reachability), then POST register (https then http on EOF), parses response and stores device via share.SetUserScanCurrent.
 // Used by ListenMulticastUsingHTTPWithTimeout and ScanOnceHTTP. Returns true if a device was discovered and stored.
 func scanOneIPHTTP(targetIP string, payloadBytes []byte, httpClient *http.Client) bool {
-	if !tool.QuickTCPProbe(targetIP, multcastPort, tcpProbeTimeout) {
+	if !tool.QuickICMPProbe(targetIP, icmpProbeTimeout) {
 		return false
 	}
 	protocol := "https"
