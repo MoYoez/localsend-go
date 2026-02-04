@@ -76,17 +76,20 @@ func (ctrl *UploadController) HandlePrepareUpload(c *gin.Context) {
 		// Initialize upload statistics for this session
 		models.InitSessionStats(response.SessionId, len(request.Files))
 
-		// Collect all file info for single notification
-		filesList := make([]map[string]any, 0, len(request.Files))
+		// Collect file info for notification (limit to MaxNotifyFiles to control payload size)
+		maxFiles := min(len(request.Files), notify.MaxNotifyFiles)
+		filesList := make([]map[string]any, 0, maxFiles)
 		var totalSize int64
 		for fileID, fileInfo := range request.Files {
-			filesList = append(filesList, map[string]any{
-				"fileId":   fileID,
-				"fileName": fileInfo.FileName,
-				"size":     fileInfo.Size,
-				"fileType": fileInfo.FileType,
-			})
 			totalSize += fileInfo.Size
+			if len(filesList) < notify.MaxNotifyFiles {
+				filesList = append(filesList, map[string]any{
+					"fileId":   fileID,
+					"fileName": fileInfo.FileName,
+					"size":     fileInfo.Size,
+					"fileType": fileInfo.FileType,
+				})
+			}
 		}
 
 		// Send single notification asynchronously
@@ -161,17 +164,20 @@ func (ctrl *UploadController) HandlePrepareV1Upload(c *gin.Context) {
 		// Initialize upload statistics for this session
 		models.InitSessionStats(response.SessionId, len(request.Files))
 
-		// Collect all file info for single notification
-		filesList := make([]map[string]any, 0, len(request.Files))
+		// Collect file info for notification (limit to MaxNotifyFiles to control payload size)
+		maxFiles := min(len(request.Files), notify.MaxNotifyFiles)
+		filesList := make([]map[string]any, 0, maxFiles)
 		var totalSize int64
 		for fileID, fileInfo := range request.Files {
-			filesList = append(filesList, map[string]any{
-				"fileId":   fileID,
-				"fileName": fileInfo.FileName,
-				"size":     fileInfo.Size,
-				"fileType": fileInfo.FileType,
-			})
 			totalSize += fileInfo.Size
+			if len(filesList) < notify.MaxNotifyFiles {
+				filesList = append(filesList, map[string]any{
+					"fileId":   fileID,
+					"fileName": fileInfo.FileName,
+					"size":     fileInfo.Size,
+					"fileType": fileInfo.FileType,
+				})
+			}
 		}
 
 		// Send single notification asynchronously

@@ -104,8 +104,12 @@ func HandlePrepareDownload(c *gin.Context) {
 			defer models.DeleteConfirmDownloadChannel(sessionId)
 
 			files := models.GetShareSessionFiles(session)
-			filesList := make([]types.FileInfo, 0, len(files))
+			maxFiles := min(len(files), notify.MaxNotifyFiles)
+			filesList := make([]types.FileInfo, 0, maxFiles)
 			for _, info := range files {
+				if len(filesList) >= notify.MaxNotifyFiles {
+					break
+				}
 				filesList = append(filesList, info)
 			}
 

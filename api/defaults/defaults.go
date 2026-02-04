@@ -99,8 +99,13 @@ func DefaultOnPrepareUpload(request *types.PrepareUploadRequest, pin string) (*t
 		models.SetConfirmRecvChannel(askSession, confirmCh)
 		defer models.DeleteConfirmRecvChannel(askSession)
 
-		files := make([]types.FileInfo, 0, len(request.Files))
+		// Only collect first MaxNotifyFiles for notify payload, keep full FileInfo
+		maxFiles := min(len(request.Files), notify.MaxNotifyFiles)
+		files := make([]types.FileInfo, 0, maxFiles)
 		for _, info := range request.Files {
+			if len(files) >= notify.MaxNotifyFiles {
+				break
+			}
 			files = append(files, info)
 		}
 
@@ -109,10 +114,11 @@ func DefaultOnPrepareUpload(request *types.PrepareUploadRequest, pin string) (*t
 			Title:   "Confirm Receive",
 			Message: fmt.Sprintf("Incoming files from %s", request.Info.Alias),
 			Data: map[string]any{
-				"sessionId": askSession,
-				"from":      request.Info.Alias,
-				"fileCount": len(request.Files),
-				"files":     files,
+				"sessionId":  askSession,
+				"from":       request.Info.Alias,
+				"fileCount":  len(request.Files),
+				"totalFiles": len(request.Files),
+				"files":      files,
 			},
 		}
 		tool.DefaultLogger.Infof("[Notify] Sending confirm_recv notification: %v", notification)
