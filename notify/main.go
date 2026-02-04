@@ -22,6 +22,11 @@ const NotifyWriteChunkSize = 32 * 1024 // 32KB
 // MaxNotifyFiles is the maximum number of files to include in notify payload (truncate if exceeded)
 const MaxNotifyFiles = 20
 
+// upload_end uses stricter limits to keep payload under 32KB for large batches
+const MaxNotifyFilesUploadEnd = 10
+const MaxNotifyPathLen = 256
+const MaxNotifyFileNameLen = 128
+
 // Configuration for Unix Domain Socket notification
 var (
 	// DefaultUnixSocketPath is the default Unix socket path for IPC
@@ -192,6 +197,39 @@ func SendUploadNotification(eventType, sessionId, fileId string, fileInfo map[st
 				n++
 			}
 			notification.Data["savePaths"] = truncated
+		}
+	}
+
+	// upload_end: stricter truncation for large batches (keep payload under 32KB)
+	if eventType == types.NotifyTypeUploadEnd {
+		if paths, ok := notification.Data["savePaths"].(map[string]string); ok {
+			truncated := make(map[string]string, MaxNotifyFilesUploadEnd)
+			n := 0
+			for k, v := range paths {
+				if n >= MaxNotifyFilesUploadEnd {
+					break
+				}
+				if len(v) > MaxNotifyPathLen {
+					v = v[:MaxNotifyPathLen] + "..."
+				}
+				truncated[k] = v
+				n++
+			}
+			notification.Data["savePaths"] = truncated
+		}
+		if names, ok := notification.Data["savedFileNames"].([]string); ok {
+			if len(names) > MaxNotifyFilesUploadEnd {
+				names = names[:MaxNotifyFilesUploadEnd]
+			}
+			for i, s := range names {
+				if len(s) > MaxNotifyFileNameLen {
+					names[i] = s[:MaxNotifyFileNameLen] + "..."
+				}
+			}
+			notification.Data["savedFileNames"] = names
+		}
+		if ids, ok := notification.Data["failedFileIds"].([]string); ok && len(ids) > MaxNotifyFilesUploadEnd {
+			notification.Data["failedFileIds"] = ids[:MaxNotifyFilesUploadEnd]
 		}
 	}
 
