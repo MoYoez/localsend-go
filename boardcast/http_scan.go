@@ -203,6 +203,10 @@ func ListenMulticastUsingHTTPWithTimeout(self *types.VersionMessageHTTP, timeout
 				tool.DefaultLogger.Debug("HTTP scan: restart without immediate scan, next scan in 30s")
 			}
 		case <-ticker.C:
+			if IsScanPaused() {
+				tool.DefaultLogger.Debug("HTTP scan: paused, skipping this tick")
+				continue
+			}
 			scanOnce()
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/moyoez/localsend-go/tool"
@@ -45,12 +46,33 @@ var (
 	autoScanRestartCh   chan restartAction // channel to signal restart
 	autoScanHTTPRunning bool
 	autoScanUDPRunning  bool
+
+	// scanPauseCount is an atomic reference counter for pausing scans during file transfers.
+	// When > 0, scan loops skip their ticks without resetting timers.
+	scanPauseCount atomic.Int32
 )
 
 // restartAction is sent on autoScanRestartCh. When SkipHTTPImmediateScan is true (e.g. after scan-now),
 // HTTP loop only resets timeout and does not run scanOnce() immediately; next scan is in 30s.
 type restartAction struct {
 	SkipHTTPImmediateScan bool
+}
+
+// PauseScan increments the pause reference counter. While paused, scan loops skip their ticks.
+func PauseScan() {
+	n := scanPauseCount.Add(1)
+	tool.DefaultLogger.Infof("Scan paused (active transfers: %d)", n)
+}
+
+// ResumeScan decrements the pause reference counter. Scanning resumes when counter reaches 0.
+func ResumeScan() {
+	n := scanPauseCount.Add(-1)
+	tool.DefaultLogger.Infof("Scan resumed (active transfers: %d)", n)
+}
+
+// IsScanPaused returns true if any file transfer is active and scanning should be skipped.
+func IsScanPaused() bool {
+	return scanPauseCount.Load() > 0
 }
 
 // SetMultcastAddress overrides the default multicast address

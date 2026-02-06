@@ -3,7 +3,9 @@ package boardcast
 import (
 	"fmt"
 	"sync"
+	"time"
 
+	"github.com/moyoez/localsend-go/share"
 	"github.com/moyoez/localsend-go/tool"
 	"github.com/moyoez/localsend-go/types"
 )
@@ -53,6 +55,17 @@ func RestartAutoScan(skipHTTPImmediateScan bool) {
 	}
 }
 
+// scanNowRestartAutoScan restarts or resumes auto scan after scan-now completes.
+func scanNowRestartAutoScan(config *types.ScanConfig) {
+	if IsAutoScanRunning() {
+		tool.DefaultLogger.Debug("Auto scan is running, sending restart signal (HTTP next scan in 30s)")
+		RestartAutoScan(true)
+	} else {
+		tool.DefaultLogger.Info("Auto scan has stopped, restarting auto scan loops (HTTP first scan in 30s)")
+		restartAutoScanLoops(config, true)
+	}
+}
+
 // IsAutoScanRunning returns whether any auto scan loop is currently running.
 func IsAutoScanRunning() bool {
 	autoScanControlMu.Lock()
@@ -76,18 +89,20 @@ func ScanNow() error {
 	if config.SelfHTTP != nil {
 		tool.DefaultLogger.Debug("scan-now: executing HTTP scan with default background scan options...")
 		scanNowOpts := &HTTPScanOptions{Concurrency: autoScanConcurrencyLimit, RateLimitPPS: autoScanICMPRatePPS}
+
+		// 1. First scan (wait for full completion)
 		if err := ScanOnceHTTP(config.SelfHTTP, scanNowOpts); err != nil {
 			return err
 		}
-		go func() {
-			if IsAutoScanRunning() {
-				tool.DefaultLogger.Debug("Auto scan is running, sending restart signal (HTTP next scan in 30s)")
-				RestartAutoScan(true)
-			} else {
-				tool.DefaultLogger.Info("Auto scan has stopped, restarting auto scan loops (HTTP first scan in 30s)")
-				restartAutoScanLoops(config, true)
-			}
-		}()
+
+		// 2. Check if devices found after first scan
+		if len(share.ListUserScanCurrent()) > 0 {
+			go scanNowRestartAutoScan(config)
+			return nil
+		}
+
+		// 3. No devices found: start background retry loop (non-blocking)
+		go scanNowBackgroundLoop(config, scanNowOpts)
 		return nil
 	}
 
@@ -134,6 +149,46 @@ func ScanNow() error {
 
 	default:
 		return fmt.Errorf("unknown scan mode: %d", config.Mode)
+	}
+}
+
+// scanNowBackgroundLoop runs in a background goroutine after scan-now returns empty.
+// It retries HTTP scanning every 30s, up to HTTPTimeout (default 60s).
+// Exits early if devices are found. On exit, restarts normal auto scan.
+func scanNowBackgroundLoop(config *types.ScanConfig, opts *HTTPScanOptions) {
+	httpTimeout := config.HTTPTimeout
+	if httpTimeout <= 0 {
+		httpTimeout = 60
+	}
+	tool.DefaultLogger.Infof("scan-now: no devices found, starting background retry loop (30s interval, %ds timeout)", httpTimeout)
+
+	timeoutTimer := time.NewTimer(time.Duration(httpTimeout) * time.Second)
+	defer timeoutTimer.Stop()
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeoutTimer.C:
+			tool.DefaultLogger.Info("scan-now: background retry loop timed out")
+			scanNowRestartAutoScan(config)
+			return
+		case <-ticker.C:
+			if IsScanPaused() {
+				tool.DefaultLogger.Debug("scan-now: background loop paused, skipping this tick")
+				continue
+			}
+			if err := ScanOnceHTTP(config.SelfHTTP, opts); err != nil {
+				tool.DefaultLogger.Warnf("scan-now: background HTTP scan failed: %v", err)
+				continue
+			}
+			if len(share.ListUserScanCurrent()) > 0 {
+				tool.DefaultLogger.Info("scan-now: background loop found devices, exiting")
+				scanNowRestartAutoScan(config)
+				return
+			}
+		}
 	}
 }
 

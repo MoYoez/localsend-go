@@ -233,6 +233,10 @@ func SendMulticastUsingUDPWithTimeout(message *types.VersionMessage, timeout int
 			startTime = time.Now()
 			sendOnce() // UDP always sends immediately on restart
 		case <-ticker.C:
+			if IsScanPaused() {
+				tool.DefaultLogger.Debug("UDP scan: paused, skipping this tick")
+				continue
+			}
 			sendOnce()
 		}
 	}

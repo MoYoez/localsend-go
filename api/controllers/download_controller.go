@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/moyoez/localsend-go/api/models"
+	"github.com/moyoez/localsend-go/boardcast"
 	"github.com/moyoez/localsend-go/notify"
 	"github.com/moyoez/localsend-go/tool"
 	"github.com/moyoez/localsend-go/types"
@@ -232,5 +233,7 @@ func HandleDownload(c *gin.Context) {
 	}
 
 	tool.DefaultLogger.Infof("[Download] Serving file: sessionId=%s, fileId=%s, path=%s", sessionId, fileId, entry.LocalPath)
+	boardcast.PauseScan()
+	defer boardcast.ResumeScan()
 	c.File(entry.LocalPath)
 }

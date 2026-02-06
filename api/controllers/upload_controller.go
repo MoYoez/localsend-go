@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/moyoez/localsend-go/api/defaults"
 	"github.com/moyoez/localsend-go/api/models"
+	"github.com/moyoez/localsend-go/boardcast"
 	"github.com/moyoez/localsend-go/notify"
 	"github.com/moyoez/localsend-go/tool"
 	"github.com/moyoez/localsend-go/types"
@@ -73,6 +74,9 @@ func (ctrl *UploadController) HandlePrepareUpload(c *gin.Context) {
 
 	// Initialize session stats and send upload start notification (single notification for all files)
 	if response.SessionId != "" {
+		// Pause scanning during file transfer
+		boardcast.PauseScan()
+
 		// Initialize upload statistics for this session
 		models.InitSessionStats(response.SessionId, len(request.Files))
 
@@ -159,6 +163,9 @@ func (ctrl *UploadController) HandlePrepareV1Upload(c *gin.Context) {
 
 	// Store IP -> sessionId mapping for V1 (since V1 doesn't use sessionId in subsequent requests)
 	if response != nil && response.SessionId != "" {
+		// Pause scanning during file transfer
+		boardcast.PauseScan()
+
 		models.StoreV1Session(remoteAddr, response.SessionId)
 
 		// Initialize upload statistics for this session
@@ -239,6 +246,9 @@ func (ctrl *UploadController) HandleUploadV1Upload(c *gin.Context) {
 		remaining, isLast, stats := models.MarkFileUploadedAndCheckComplete(sessionId, fileId, false)
 		tool.DefaultLogger.Infof("[V1 Send] File failed: %s, remaining files: %d, isLast: %v", fileId, remaining, isLast)
 
+		if isLast {
+			boardcast.ResumeScan()
+		}
 		// Send notification when all files are processed (even if some failed)
 		if isLast && stats != nil {
 			go func(sid string, stats *types.SessionUploadStats, remoteAddr string) {
@@ -290,6 +300,9 @@ func (ctrl *UploadController) HandleUploadV1Upload(c *gin.Context) {
 	remaining, isLast, stats := models.MarkFileUploadedAndCheckComplete(sessionId, fileId, true)
 	tool.DefaultLogger.Infof("[V1 Send] File completed: %s, remaining files: %d, isLast: %v", fileInfo.FileName, remaining, isLast)
 
+	if isLast {
+		boardcast.ResumeScan()
+	}
 	if isLast && stats != nil {
 		go func(sid, fid string, fileInfo types.FileInfo, stats *types.SessionUploadStats) {
 			savePaths := models.GetSessionSavePaths(sid)
@@ -358,6 +371,9 @@ func (ctrl *UploadController) HandleUpload(c *gin.Context) {
 		remaining, isLast, stats := models.MarkFileUploadedAndCheckComplete(sessionId, fileId, false)
 		tool.DefaultLogger.Infof("[Upload] File failed: %s, remaining files: %d, isLast: %v", fileId, remaining, isLast)
 
+		if isLast {
+			boardcast.ResumeScan()
+		}
 		if isLast && stats != nil {
 			go func(sid string, stats *types.SessionUploadStats) {
 				savePaths := models.GetSessionSavePaths(sid)
@@ -406,6 +422,9 @@ func (ctrl *UploadController) HandleUpload(c *gin.Context) {
 	remaining, isLast, stats := models.MarkFileUploadedAndCheckComplete(sessionId, fileId, true)
 	tool.DefaultLogger.Infof("[Upload] File completed: %s, remaining files: %d, isLast: %v", fileInfo.FileName, remaining, isLast)
 
+	if isLast {
+		boardcast.ResumeScan()
+	}
 	if isLast && stats != nil {
 		go func(sid, fid string, fileInfo types.FileInfo, stats *types.SessionUploadStats) {
 			savePaths := models.GetSessionSavePaths(sid)

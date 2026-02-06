@@ -18,6 +18,7 @@ import (
 	ttlworker "github.com/FloatTech/ttl"
 	"github.com/gin-gonic/gin"
 	"github.com/moyoez/localsend-go/api/models"
+	"github.com/moyoez/localsend-go/boardcast"
 	"github.com/moyoez/localsend-go/share"
 	"github.com/moyoez/localsend-go/tool"
 	"github.com/moyoez/localsend-go/transfer"
@@ -247,6 +248,9 @@ func UserPrepareUpload(c *gin.Context) {
 		c.Status(http.StatusNoContent)
 		return
 	}
+
+	// Pause scanning during file transfer
+	boardcast.PauseScan()
 
 	sessionInfo := types.UserUploadSession{
 		Target:    targetItem,
@@ -509,6 +513,7 @@ func UserUploadBatch(c *gin.Context) {
 		}
 	}
 batchComplete:
+	boardcast.ResumeScan()
 	if result.Failed == result.Total {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "All files failed to upload", "result": result})
 	} else if result.Failed > 0 {
@@ -532,6 +537,7 @@ func UserCancelUpload(c *gin.Context) {
 		return
 	}
 	CancelUserUploadSession(sessionId)
+	boardcast.ResumeScan()
 	targetAddr := &net.UDPAddr{
 		IP:   net.ParseIP(sessionInfo.Target.Ipaddress).To4(),
 		Port: sessionInfo.Target.Port,
