@@ -16,7 +16,11 @@ import (
 	"github.com/moyoez/localsend-go/types"
 )
 
-const screenshotCacheKey = "steam_screenshots"
+const (
+	screenshotCacheKey   = "steam_screenshots"
+	duplicateMinSizeKB   = 20
+	duplicateMinSizeByte = duplicateMinSizeKB * 1024
+)
 
 var (
 	screenshotsDir   = "760/remote"
@@ -133,6 +137,25 @@ func GetUserScreenShot(c *gin.Context) {
 		}
 		filtered = append(filtered, item)
 	}
+
+	// remove lower than duplicateMinSizeByte
+	byName := make(map[string][]types.ScreenshotItem)
+	for _, item := range filtered {
+		byName[item.Filename] = append(byName[item.Filename], item)
+	}
+	filtered = filtered[:0]
+	for _, items := range byName {
+		if len(items) > 1 {
+			for _, item := range items {
+				if item.Size >= duplicateMinSizeByte {
+					filtered = append(filtered, item)
+				}
+			}
+		} else {
+			filtered = append(filtered, items[0])
+		}
+	}
+	sort.Slice(filtered, func(i, j int) bool { return filtered[i].Mtime > filtered[j].Mtime })
 
 	total := len(filtered)
 	offset := (page - 1) * pageSize
