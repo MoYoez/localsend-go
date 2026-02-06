@@ -112,16 +112,16 @@ func (s *Server) setupRoutes() *gin.Engine {
 	}
 	self := engine.Group("/api/self/v1", middlewares.OnlyAllowLocal)
 	{
-		self.GET("/get-network-info", controllers.UserGetNetworkInfo)  // Get local network info with IP and segment number
-		self.GET("/scan-current", controllers.UserScanCurrent)         // Get current scanned devices
-		self.GET("/scan-now", controllers.UserScanNow)                 // Trigger immediate scan based on current config
-		self.POST("/prepare-upload", controllers.UserPrepareUpload)    // Prepare upload endpoint
-		self.POST("/upload", controllers.UserUpload)                   // Actual upload endpoint
-		self.POST("/upload-batch", controllers.UserUploadBatch)        // Batch upload endpoint (supports file:/// protocol)
-		self.GET("/confirm-recv", controllers.UserConfirmRecv)         // Confirm recv endpoint
+		self.GET("/get-network-info", controllers.UserGetNetworkInfo)           // Get local network info with IP and segment number
+		self.GET("/scan-current", controllers.UserScanCurrent)                  // Get current scanned devices
+		self.GET("/scan-now", controllers.UserScanNow)                          // Trigger immediate scan based on current config
+		self.POST("/prepare-upload", controllers.UserPrepareUpload)             // Prepare upload endpoint
+		self.POST("/upload", controllers.UserUpload)                            // Actual upload endpoint
+		self.POST("/upload-batch", controllers.UserUploadBatch)                 // Batch upload endpoint (supports file:/// protocol)
+		self.GET("/confirm-recv", controllers.UserConfirmRecv)                  // Confirm recv endpoint
 		self.GET("/text-received-dismiss", controllers.UserTextReceivedDismiss) // Text received modal dismiss
-		self.GET("/confirm-download", controllers.UserConfirmDownload) // Confirm download endpoint
-		self.POST("/cancel", controllers.UserCancelUpload)             // Cancel upload endpoint (sender side)
+		self.GET("/confirm-download", controllers.UserConfirmDownload)          // Confirm download endpoint
+		self.POST("/cancel", controllers.UserCancelUpload)                      // Cancel upload endpoint (sender side)
 		self.GET("/get-image", controllers.UserGetImage)
 		self.GET("/favorites", controllers.UserFavoritesList)                     // List favorite devices
 		self.POST("/favorites", controllers.UserFavoritesAdd)                     // Add a favorite device
@@ -130,6 +130,7 @@ func (s *Server) setupRoutes() *gin.Engine {
 		self.POST("/create-share-session", controllers.UserCreateShareSession)    // Create share session for download API
 		self.DELETE("/close-share-session", controllers.UserCloseShareSession)    // Close share session
 		self.GET("/create-qr-code", controllers.GenerateQRCode)                   // QR code PNG (same params as api.qrserver.com)
+		self.GET("/get-user-screenshot", controllers.GetUserScreenShot)           // made screenshot in frontend.
 	}
 
 	// Serve Next.js static export for download page at root (when Download enabled and web/out exists)
