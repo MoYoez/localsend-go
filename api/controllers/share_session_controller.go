@@ -15,6 +15,9 @@ import (
 	"github.com/moyoez/localsend-go/types"
 )
 
+// shareSessionSkipSHASingleFileThreshold: when single-file count exceeds this, skip SHA256 for single files (same as folders).
+const shareSessionSkipSHASingleFileThreshold = 50
+
 // UserCreateShareSession creates a share session for the download API
 // POST /api/self/v1/create-share-session
 func UserCreateShareSession(c *gin.Context) {
@@ -27,6 +30,26 @@ func UserCreateShareSession(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, tool.FastReturnError("files is required and must not be empty"))
 		return
 	}
+
+	// Count single files (non-dirs) to decide whether to skip SHA256 for single files when count is large
+	singleFileCount := 0
+	for _, fileInput := range request.Files {
+		if fileInput.FileUrl == "" {
+			continue
+		}
+		parsed, err := url.Parse(fileInput.FileUrl)
+		if err != nil || parsed.Scheme != "file" {
+			continue
+		}
+		info, err := os.Stat(parsed.Path)
+		if err != nil {
+			continue
+		}
+		if !info.IsDir() {
+			singleFileCount++
+		}
+	}
+	skipSHAForSingleFiles := singleFileCount > shareSessionSkipSHASingleFileThreshold
 
 	files := make(map[string]types.ShareFileEntry)
 	for fileId, fileInput := range request.Files {
@@ -53,7 +76,7 @@ func UserCreateShareSession(c *gin.Context) {
 		}
 
 		if info.IsDir() {
-			fileInputMap, pathMap, err := tool.ProcessPathInput(localPath, true)
+			fileInputMap, pathMap, err := tool.ProcessPathInput(localPath, false)
 			if err != nil {
 				c.JSON(http.StatusBadRequest, tool.FastReturnError(fmt.Sprintf("Invalid folder %s: %v", fileId, err)))
 				return
@@ -79,7 +102,7 @@ func UserCreateShareSession(c *gin.Context) {
 			continue
 		}
 
-		if err := tool.ProcessFileInput(&input); err != nil {
+		if err := tool.ProcessFileInput(&input, !skipSHAForSingleFiles); err != nil {
 			c.JSON(http.StatusBadRequest, tool.FastReturnError(fmt.Sprintf("Invalid file %s: %v", fileId, err)))
 			return
 		}

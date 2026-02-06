@@ -16,8 +16,9 @@ import (
 	"github.com/moyoez/localsend-go/types"
 )
 
-// processFileInput processes a FileInput and fills missing information from fileUrl if provided
-func ProcessFileInput(fileInput *types.FileInput) error {
+// ProcessFileInput processes a FileInput and fills missing information from fileUrl if provided.
+// When calculateSHA is false, SHA256 is never computed. When true, it is computed only if fileInput.SHA256 is empty.
+func ProcessFileInput(fileInput *types.FileInput, calculateSHA bool) error {
 	// If fileUrl is provided, auto-fill missing information
 	if fileInput.FileUrl != "" {
 		parsedUrl, err := url.Parse(fileInput.FileUrl)
@@ -32,11 +33,11 @@ func ProcessFileInput(fileInput *types.FileInput) error {
 		filePath := parsedUrl.Path
 		DefaultLogger.Infof("Reading file info from: %s", filePath)
 
-		// Determine if we need to calculate SHA256
-		calculateSHA := fileInput.SHA256 == ""
+		// When calculateSHA is true, compute only if not already set
+		doCalculateSHA := calculateSHA && fileInput.SHA256 == ""
 
 		// Get file information
-		fileName, fileSize, fileType, sha256Hash, err := GetFileInfoFromPath(filePath, calculateSHA)
+		fileName, fileSize, fileType, sha256Hash, err := GetFileInfoFromPath(filePath, doCalculateSHA)
 		if err != nil {
 			return err
 		}
@@ -54,7 +55,7 @@ func ProcessFileInput(fileInput *types.FileInput) error {
 			fileInput.FileType = fileType
 			DefaultLogger.Debugf("Auto-detected fileType: %s", fileType)
 		}
-		if fileInput.SHA256 == "" && sha256Hash != "" {
+		if doCalculateSHA && sha256Hash != "" {
 			fileInput.SHA256 = sha256Hash
 			DefaultLogger.Debugf("Auto-calculated SHA256: %s", sha256Hash)
 		}

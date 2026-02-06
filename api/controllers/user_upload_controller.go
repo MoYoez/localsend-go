@@ -25,6 +25,9 @@ import (
 	"github.com/moyoez/localsend-go/types"
 )
 
+// prepareUploadSkipSHASingleFileThreshold: when single-file count exceeds this, skip SHA256 for single files (same as share session / folders).
+const prepareUploadSkipSHASingleFileThreshold = 50
+
 var (
 	UserUploadSessionTTL      = 60 * time.Minute
 	UserUploadSessions        = ttlworker.NewCache[string, types.UserUploadSession](UserUploadSessionTTL)
@@ -178,12 +181,20 @@ func UserPrepareUpload(c *gin.Context) {
 		}
 	}
 
+	var singleFileCount int
+	if request.UseFolderUpload {
+		singleFileCount = len(additionalFiles)
+	} else {
+		singleFileCount = len(request.Files)
+	}
+	skipSHAForSingleFiles := singleFileCount > prepareUploadSkipSHASingleFileThreshold
+
 	tool.DefaultLogger.Infof("Processing %d total files for prepare-upload", len(request.Files))
 	for fileID, fileInput := range request.Files {
 		_, isAdditionalFile := additionalFiles[fileID]
 		needsProcessing := !request.UseFolderUpload || isAdditionalFile
 		if needsProcessing {
-			if err := tool.ProcessFileInput(&fileInput); err != nil {
+			if err := tool.ProcessFileInput(&fileInput, !skipSHAForSingleFiles); err != nil {
 				c.JSON(http.StatusBadRequest, tool.FastReturnErrorWithData(fmt.Sprintf("Failed to process file %s: %v", fileID, err), map[string]any{"fileId": fileID}))
 				return
 			}
