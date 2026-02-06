@@ -6,7 +6,7 @@ type UserPrepareUploadRequest struct {
 	Files                 map[string]FileInput `json:"files,omitempty"`
 	TextContent           string               `json:"textContent,omitempty"` // Optional: for single text/plain send, injected as preview when building prepare-upload
 	UseFolderUpload       bool                 `json:"useFolderUpload,omitempty"`
-	FolderPath            string               `json:"folderPath,omitempty"`   // Single folder (backward compatible)
+	FolderPath            string               `json:"folderPath,omitempty"`  // Single folder (backward compatible)
 	FolderPaths           []string             `json:"folderPaths,omitempty"` // Multiple folders
 	UseFastSender         bool                 `json:"useFastSender,omitempty"`
 	UseFastSenderIPSuffex string               `json:"useFastSenderIPSuffex,omitempty"`
@@ -23,11 +23,11 @@ type UserUploadRequest struct {
 
 // UserUploadBatchRequest represents batch upload request
 type UserUploadBatchRequest struct {
-	SessionId       string             `json:"sessionId"`
+	SessionId       string               `json:"sessionId"`
 	Files           []UserUploadFileItem `json:"files,omitempty"`
-	UseFolderUpload bool               `json:"useFolderUpload,omitempty"`
-	FolderPath      string               `json:"folderPath,omitempty"`   // Single folder (backward compatible)
-	FolderPaths     []string             `json:"folderPaths,omitempty"`  // Multiple folders
+	UseFolderUpload bool                 `json:"useFolderUpload,omitempty"`
+	FolderPath      string               `json:"folderPath,omitempty"`  // Single folder (backward compatible)
+	FolderPaths     []string             `json:"folderPaths,omitempty"` // Multiple folders
 }
 
 // UserUploadFileItem represents a single file in batch upload
@@ -39,9 +39,9 @@ type UserUploadFileItem struct {
 
 // UserUploadBatchResult represents the result of a batch upload operation
 type UserUploadBatchResult struct {
-	Total   int                   `json:"total"`
-	Success int                   `json:"success"`
-	Failed  int                   `json:"failed"`
+	Total   int                    `json:"total"`
+	Success int                    `json:"success"`
+	Failed  int                    `json:"failed"`
 	Results []UserUploadItemResult `json:"results"`
 }
 
