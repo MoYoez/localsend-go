@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { FileDetailModal } from "./components/FileDetailModal";
 import { LanguageSwitcher } from "./components/LanguageSwitcher";
 import { useLanguage } from "./context/LanguageContext";
@@ -49,6 +49,7 @@ function DownloadContent() {
   const [sessionInput, setSessionInput] = useState("");
   const [data, setData] = useState<PrepareDownloadResponse | null>(null);
   const [loading, setLoading] = useState(!!sessionId);
+  const [waitingConfirm, setWaitingConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsPin, setNeedsPin] = useState(false);
   const [filePage, setFilePage] = useState(1);
@@ -57,6 +58,10 @@ function DownloadContent() {
     fileId: string;
     file: FileInfo;
   } | null>(null);
+  const pollingPinRef = useRef<string | undefined>(undefined);
+  const got202Ref = useRef(false);
+  const POLL_INTERVAL_MS = 2500;
+  const POLL_TIMEOUT_MS = 60000;
 
   const fetchFileList = useCallback(
     async (pinValue?: string) => {
@@ -66,57 +71,89 @@ function DownloadContent() {
         return;
       }
 
-      setLoading(true);
       setError(null);
       setNeedsPin(false);
+      if (!waitingConfirm) setLoading(true);
 
       try {
         let url: URL;
         if (process.env.NODE_ENV === "development") {
           url = new URL("/api/localsend/v2/prepare-download", "http://localhost:53317");
-          } else {
+        } else {
           url = new URL("/api/localsend/v2/prepare-download", window.location.origin);
         }
         url.searchParams.set("sessionId", sessionId);
         if (pinValue) {
           url.searchParams.set("pin", pinValue);
         }
-        
 
         const res = await fetch(url.toString(), { method: "GET" });
         const text = await res.text();
+
+        if (res.status === 202) {
+          const body = text ? JSON.parse(text) : {};
+          if (body?.status === "waiting_confirmation") {
+            got202Ref.current = true;
+            setWaitingConfirm(true);
+            pollingPinRef.current = pinValue;
+            return;
+          }
+        }
+        got202Ref.current = false;
 
         if (res.status === 401) {
           const body = text ? JSON.parse(text) : {};
           const msg = body?.error ?? t("error.pinRequired");
           setNeedsPin(true);
           setError(msg);
+          setWaitingConfirm(false);
           return;
         }
 
         if (!res.ok) {
           const body = text ? JSON.parse(text) : {};
           setError(body?.error ?? `${t("error.requestFailed")}: ${res.status}`);
+          setWaitingConfirm(false);
           return;
         }
 
         const json: PrepareDownloadResponse = JSON.parse(text);
+        setWaitingConfirm(false);
         setData(json);
         setPin(pinValue ?? "");
         setFilePage(1);
       } catch (err) {
         setError(err instanceof Error ? err.message : t("error.requestFailed"));
+        setWaitingConfirm(false);
       } finally {
-        setLoading(false);
+        if (!got202Ref.current) setLoading(false);
       }
     },
-    [sessionId, t]
+    [sessionId, t, waitingConfirm]
   );
 
   useEffect(() => {
     if (sessionId) fetchFileList();
     else setLoading(false);
   }, [sessionId, fetchFileList]);
+
+  // When waiting for confirmation, poll prepare-download until 200 or timeout
+  useEffect(() => {
+    if (!waitingConfirm || !sessionId) return;
+    const start = Date.now();
+    const tick = () => {
+      if (Date.now() - start > POLL_TIMEOUT_MS) {
+        setError(t("error.authTimeout"));
+        setWaitingConfirm(false);
+        setLoading(false);
+        got202Ref.current = false;
+        return;
+      }
+      fetchFileList(pollingPinRef.current);
+    };
+    const id = setInterval(tick, POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [sessionId, waitingConfirm, fetchFileList, t]);
 
   useEffect(() => {
     setFilePage(1);
@@ -193,7 +230,9 @@ function DownloadContent() {
         <div className="absolute right-6 top-6">
           <LanguageSwitcher />
         </div>
-        <div className="text-zinc-600 dark:text-zinc-400">{t("loading")}</div>
+        <div className="text-zinc-600 dark:text-zinc-400">
+          {waitingConfirm ? t("loading.waitingConfirmation") : t("loading")}
+        </div>
       </main>
     );
   }

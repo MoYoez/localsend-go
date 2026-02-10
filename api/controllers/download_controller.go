@@ -15,6 +15,26 @@ import (
 	"github.com/moyoez/localsend-go/types"
 )
 
+// browserNameFromUA returns a short browser name from User-Agent for display.
+// I dont like Quake, QQ browser or any other browser(They are too bad!!!)
+func browserNameFromUA(ua string) string {
+	ua = strings.ToLower(ua)
+	switch {
+	case strings.Contains(ua, "edg/"):
+		return "Edge"
+	case strings.Contains(ua, "chrome") && !strings.Contains(ua, "chromium"):
+		return "Chrome"
+	case strings.Contains(ua, "firefox"):
+		return "Firefox"
+	case strings.Contains(ua, "safari") && !strings.Contains(ua, "chrome"):
+		return "Safari"
+	case strings.Contains(ua, "opera") || strings.Contains(ua, "opr/"):
+		return "Opera"
+	default:
+		return ""
+	}
+}
+
 // HandlePrepareDownload handles prepare-download request (LocalSend protocol 5.2)
 // POST /api/localsend/v2/prepare-download?sessionId=xxx&pin=xxx
 func HandlePrepareDownload(c *gin.Context) {
@@ -94,15 +114,31 @@ func HandlePrepareDownload(c *gin.Context) {
 		}
 	}
 
+	clientKey := c.ClientIP()
+	userAgent := c.GetHeader("User-Agent")
+	clientType := browserNameFromUA(userAgent)
+	if clientType == "" && userAgent != "" {
+		clientType = "Browser"
+	} else if clientType == "" {
+		clientType = "Unknown"
+	}
+
 	if !session.AutoAccept {
-		if models.IsDownloadConfirmed(sessionId) {
-
-			tool.DefaultLogger.Infof("[PrepareDownload] Session %s already confirmed, returning file list", sessionId)
+		if models.IsDownloadConfirmed(sessionId, clientKey) {
+			tool.DefaultLogger.Infof("[PrepareDownload] Session %s already confirmed for client %s, returning file list", sessionId, clientKey)
+			// fall through to return 200 + files below
+		} else if ch, hasPending := models.GetConfirmDownloadChannel(sessionId, clientKey); hasPending && ch != nil {
+			// same client already waiting for confirmation; return 202 so web can keep polling
+			tool.DefaultLogger.Infof("[PrepareDownload] Session %s client %s already pending confirmation", sessionId, clientKey)
+			c.JSON(http.StatusAccepted, gin.H{
+				"status":  "waiting_confirmation",
+				"message": "Waiting for sender to authorize this device",
+			})
+			return
 		} else {
-
+			// need confirmation: create channel, send notification, return 202 immediately; goroutine waits for result
 			confirmCh := make(chan types.ConfirmResult, 1)
-			models.SetConfirmDownloadChannel(sessionId, confirmCh)
-			defer models.DeleteConfirmDownloadChannel(sessionId)
+			models.SetConfirmDownloadChannel(sessionId, clientKey, confirmCh)
 
 			files := models.GetShareSessionFiles(session)
 			maxFiles := min(len(files), notify.MaxNotifyFiles)
@@ -119,37 +155,48 @@ func HandlePrepareDownload(c *gin.Context) {
 				Title:   "Confirm Download",
 				Message: "Receiver is requesting to download files. Allow?",
 				Data: map[string]any{
-					"sessionId": sessionId,
-					"fileCount": len(files),
-					"files":     filesList,
+					"sessionId":  sessionId,
+					"clientKey":  clientKey,
+					"clientIp":   clientKey,
+					"userAgent":  userAgent,
+					"clientType": clientType,
+					"fileCount":  len(files),
+					"files":      filesList,
 				},
 			}
-			tool.DefaultLogger.Infof("[Notify] Sending confirm_download notification: sessionId=%s, fileCount=%d", sessionId, len(files))
-			tool.DefaultLogger.Debugf("Accept: GET /api/self/v1/confirm-download?sessionId=%s&confirmed=true", sessionId)
-			tool.DefaultLogger.Debugf("Reject: GET /api/self/v1/confirm-download?sessionId=%s&confirmed=false", sessionId)
+			tool.DefaultLogger.Infof("[Notify] Sending confirm_download notification: sessionId=%s, clientKey=%s, fileCount=%d", sessionId, clientKey, len(files))
+			tool.DefaultLogger.Debugf("Accept: GET /api/self/v1/confirm-download?sessionId=%s&clientKey=%s&confirmed=true", sessionId, clientKey)
+			tool.DefaultLogger.Debugf("Reject: GET /api/self/v1/confirm-download?sessionId=%s&clientKey=%s&confirmed=false", sessionId, clientKey)
 			if err := notify.SendNotification(notification, ""); err != nil {
+				models.DeleteConfirmDownloadChannel(sessionId, clientKey)
 				tool.DefaultLogger.Errorf("[Notify] Failed to send confirm_download notification: %v", err)
 				c.JSON(http.StatusInternalServerError, tool.FastReturnError("Failed to request confirmation"))
 				return
 			}
 
-			confirmTimeout := 30 * time.Second
-			confirmTimer := time.NewTimer(confirmTimeout)
-			defer confirmTimer.Stop()
-
-			select {
-			case result := <-confirmCh:
-				if !result.Confirmed {
-					tool.DefaultLogger.Infof("[PrepareDownload] Download rejected by user: sessionId=%s", sessionId)
-					c.JSON(http.StatusForbidden, tool.FastReturnError("Rejected"))
-					return
+			go func() {
+				confirmTimeout := 30 * time.Second
+				confirmTimer := time.NewTimer(confirmTimeout)
+				defer confirmTimer.Stop()
+				defer models.DeleteConfirmDownloadChannel(sessionId, clientKey)
+				select {
+				case result := <-confirmCh:
+					if result.Confirmed {
+						models.MarkDownloadConfirmed(sessionId, clientKey)
+						tool.DefaultLogger.Infof("[PrepareDownload] Download confirmed by user: sessionId=%s, clientKey=%s", sessionId, clientKey)
+					} else {
+						tool.DefaultLogger.Infof("[PrepareDownload] Download rejected by user: sessionId=%s, clientKey=%s", sessionId, clientKey)
+					}
+				case <-confirmTimer.C:
+					tool.DefaultLogger.Infof("[PrepareDownload] Download confirmation timed out: sessionId=%s, clientKey=%s", sessionId, clientKey)
 				}
-				models.MarkDownloadConfirmed(sessionId)
-			case <-confirmTimer.C:
-				tool.DefaultLogger.Infof("[PrepareDownload] Download confirmation timed out: sessionId=%s", sessionId)
-				c.JSON(http.StatusForbidden, tool.FastReturnError("Rejected"))
-				return
-			}
+			}()
+
+			c.JSON(http.StatusAccepted, gin.H{
+				"status":  "waiting_confirmation",
+				"message": "Waiting for sender to authorize this device",
+			})
+			return
 		}
 	}
 

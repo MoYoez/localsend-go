@@ -69,12 +69,17 @@ func UserTextReceivedDismiss(c *gin.Context) {
 }
 
 // UserConfirmDownload handles confirm download request
-// GET /api/self/v1/confirm-download
+// GET /api/self/v1/confirm-download?sessionId=xxx&clientKey=yyy&confirmed=true
 func UserConfirmDownload(c *gin.Context) {
 	sessionId := strings.TrimSpace(c.Query("sessionId"))
+	clientKey := strings.TrimSpace(c.Query("clientKey"))
 	confirmedRaw := strings.TrimSpace(c.Query("confirmed"))
 	if sessionId == "" {
 		c.JSON(http.StatusBadRequest, tool.FastReturnError("Missing required parameter: sessionId"))
+		return
+	}
+	if clientKey == "" {
+		c.JSON(http.StatusBadRequest, tool.FastReturnError("Missing required parameter: clientKey"))
 		return
 	}
 	if confirmedRaw == "" {
@@ -88,7 +93,7 @@ func UserConfirmDownload(c *gin.Context) {
 		return
 	}
 
-	confirmCh, ok := models.GetConfirmDownloadChannel(sessionId)
+	confirmCh, ok := models.GetConfirmDownloadChannel(sessionId, clientKey)
 	if !ok {
 		c.JSON(http.StatusNotFound, tool.FastReturnError("Session not found or expired"))
 		return
@@ -96,7 +101,8 @@ func UserConfirmDownload(c *gin.Context) {
 
 	select {
 	case confirmCh <- types.ConfirmResult{Confirmed: confirmed}:
-		models.DeleteConfirmDownloadChannel(sessionId)
+		models.DeleteConfirmDownloadChannel(sessionId, clientKey)
+		// goroutine in download_controller will call MarkDownloadConfirmed on accept
 		c.JSON(http.StatusOK, tool.FastReturnSuccess())
 	default:
 		c.JSON(http.StatusConflict, tool.FastReturnError("Confirm channel busy"))

@@ -39,51 +39,55 @@ func GetShareSession(sessionId string) (*types.ShareSession, bool) {
 }
 
 // RemoveShareSession removes a share session
+// confirmKey returns cache key for session+client (per-device confirm).
+func confirmKey(sessionId, clientKey string) string {
+	return sessionId + "\n" + clientKey
+}
+
+// RemoveShareSession removes a share session (confirm caches use per-client keys and will TTL out).
 func RemoveShareSession(sessionId string) {
 	shareSessionMu.Lock()
 	defer shareSessionMu.Unlock()
 	shareSessions.Delete(sessionId)
-	confirmDownloadChans.Delete(sessionId)
-	confirmedDownloadSess.Delete(sessionId)
 }
 
-// IsDownloadConfirmed returns true if the session has been confirmed (user agreed, can download any file)
-func IsDownloadConfirmed(sessionId string) bool {
+// IsDownloadConfirmed returns true if this client has been confirmed for this session (per-device).
+func IsDownloadConfirmed(sessionId, clientKey string) bool {
 	shareSessionMu.RLock()
 	defer shareSessionMu.RUnlock()
-	return confirmedDownloadSess.Get(sessionId)
+	return confirmedDownloadSess.Get(confirmKey(sessionId, clientKey))
 }
 
-// MarkDownloadConfirmed marks the session as confirmed after user agrees
-func MarkDownloadConfirmed(sessionId string) {
+// MarkDownloadConfirmed marks this client as confirmed for the session after user agrees.
+func MarkDownloadConfirmed(sessionId, clientKey string) {
 	shareSessionMu.Lock()
 	defer shareSessionMu.Unlock()
-	confirmedDownloadSess.Set(sessionId, true)
+	confirmedDownloadSess.Set(confirmKey(sessionId, clientKey), true)
 }
 
-// SetConfirmDownloadChannel sets the channel for confirm-download callback
-func SetConfirmDownloadChannel(sessionId string, ch chan types.ConfirmResult) {
+// SetConfirmDownloadChannel sets the channel for confirm-download callback (per clientKey).
+func SetConfirmDownloadChannel(sessionId, clientKey string, ch chan types.ConfirmResult) {
 	shareSessionMu.Lock()
 	defer shareSessionMu.Unlock()
-	confirmDownloadChans.Set(sessionId, ch)
+	confirmDownloadChans.Set(confirmKey(sessionId, clientKey), ch)
 }
 
-// GetConfirmDownloadChannel retrieves the confirm-download channel
-func GetConfirmDownloadChannel(sessionId string) (chan types.ConfirmResult, bool) {
+// GetConfirmDownloadChannel retrieves the confirm-download channel for this client.
+func GetConfirmDownloadChannel(sessionId, clientKey string) (chan types.ConfirmResult, bool) {
 	shareSessionMu.RLock()
 	defer shareSessionMu.RUnlock()
-	ch := confirmDownloadChans.Get(sessionId)
+	ch := confirmDownloadChans.Get(confirmKey(sessionId, clientKey))
 	if ch == nil {
 		return nil, false
 	}
 	return ch, true
 }
 
-// DeleteConfirmDownloadChannel removes the confirm-download channel
-func DeleteConfirmDownloadChannel(sessionId string) {
+// DeleteConfirmDownloadChannel removes the confirm-download channel for this client.
+func DeleteConfirmDownloadChannel(sessionId, clientKey string) {
 	shareSessionMu.Lock()
 	defer shareSessionMu.Unlock()
-	confirmDownloadChans.Delete(sessionId)
+	confirmDownloadChans.Delete(confirmKey(sessionId, clientKey))
 }
 
 // GetShareSessionFiles returns the files map for prepare-download response
