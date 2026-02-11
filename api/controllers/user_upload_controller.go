@@ -420,7 +420,8 @@ func UserUploadBatch(c *gin.Context) {
 			c.JSON(http.StatusNotFound, tool.FastReturnError("Session not found or expired"))
 			return
 		}
-		request.Files = make([]types.UserUploadFileItem, 0, len(additionalFiles))
+		// use map to avoid duplicate fileIds
+		fileMap := make(map[string]types.UserUploadFileItem)
 		for _, folderPath := range folderPaths {
 			_, fileIdToPathMap, err := tool.ProcessFolderForUpload(folderPath, false)
 			if err != nil {
@@ -432,12 +433,16 @@ func UserUploadBatch(c *gin.Context) {
 				if !ok {
 					continue
 				}
-				request.Files = append(request.Files, types.UserUploadFileItem{
+				fileMap[fileId] = types.UserUploadFileItem{
 					FileId:  fileId,
 					Token:   token,
 					FileUrl: "file://" + filePath,
-				})
+				}
 			}
+		}
+		request.Files = make([]types.UserUploadFileItem, 0, len(fileMap)+len(additionalFiles))
+		for _, item := range fileMap {
+			request.Files = append(request.Files, item)
 		}
 		if len(additionalFiles) > 0 {
 			request.Files = append(request.Files, additionalFiles...)
@@ -587,6 +592,21 @@ func UserUploadBatch(c *gin.Context) {
 	}
 batchComplete:
 	boardcast.ResumeScan()
+
+	// when upload is cancelled or rejected, cancel the session
+	if reason == "cancelled" || reason == "rejected" {
+		sessionInfo := UserUploadSessions.Get(request.SessionId)
+		if sessionInfo.SessionId != "" {
+			targetAddr := &net.UDPAddr{
+				IP:   net.ParseIP(sessionInfo.Target.Ipaddress).To4(),
+				Port: sessionInfo.Target.Port,
+			}
+			if err := transfer.CancelSession(targetAddr, &sessionInfo.Target.VersionMessage, request.SessionId); err != nil {
+				tool.DefaultLogger.Warnf("[UserUploadBatch] Failed to cancel receiver session: %v", err)
+			}
+		}
+	}
+
 	failedFileIds := make([]string, 0, result.Failed)
 	for _, r := range result.Results {
 		if !r.Success && r.FileId != "" {
