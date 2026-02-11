@@ -17,7 +17,7 @@ var (
 	shareSessionMu        sync.RWMutex
 	shareSessions         = ttlworker.NewCache[string, *types.ShareSession](ShareSessionTTL)
 	confirmDownloadChans  = ttlworker.NewCache[string, chan types.ConfirmResult](tool.DefaultTTL)
-	confirmedDownloadSess = ttlworker.NewCache[string, bool](ShareSessionTTL) // 已确认的会话，同意后可直接下载任意文件
+	confirmedDownloadSess = ttlworker.NewCache[string, bool](ShareSessionTTL) // confirmed sessions.
 )
 
 // CacheShareSession stores a share session
