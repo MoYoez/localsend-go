@@ -593,19 +593,24 @@ func UserUploadBatch(c *gin.Context) {
 batchComplete:
 	boardcast.ResumeScan()
 
-	// when upload is cancelled or rejected, cancel the session
+	// When upload is cancelled or rejected, notify the receiver to clean up its side.
+	// If the session was already cleaned up externally (e.g., by UserCancelUpload),
+	// UserUploadSessions.Get will return empty and we skip the redundant cancel.
 	if reason == "cancelled" || reason == "rejected" {
-		sessionInfo := UserUploadSessions.Get(request.SessionId)
-		if sessionInfo.SessionId != "" {
-			targetAddr := &net.UDPAddr{
-				IP:   net.ParseIP(sessionInfo.Target.Ipaddress).To4(),
-				Port: sessionInfo.Target.Port,
+		batchSessionInfo := UserUploadSessions.Get(request.SessionId)
+		if batchSessionInfo.SessionId != "" {
+			cancelAddr := &net.UDPAddr{
+				IP:   net.ParseIP(batchSessionInfo.Target.Ipaddress).To4(),
+				Port: batchSessionInfo.Target.Port,
 			}
-			if err := transfer.CancelSession(targetAddr, &sessionInfo.Target.VersionMessage, request.SessionId); err != nil {
+			if err := transfer.CancelSession(cancelAddr, &batchSessionInfo.Target.VersionMessage, request.SessionId); err != nil {
 				tool.DefaultLogger.Warnf("[UserUploadBatch] Failed to cancel receiver session: %v", err)
 			}
 		}
 	}
+
+	// Always clean up the session after batch completes (idempotent if already cancelled externally)
+	CancelUserUploadSession(request.SessionId)
 
 	failedFileIds := make([]string, 0, result.Failed)
 	for _, r := range result.Results {
@@ -634,25 +639,28 @@ func UserCancelUpload(c *gin.Context) {
 		return
 	}
 
-	// Try to find UserUploadSession first (push mode)
-	if tool.QuerySessionIsValid(sessionId) {
-		// Push mode: cancel upload session and notify receiver
-		tool.DestorySession(sessionId)
+	// Try to find UserUploadSession first (push mode - our device sending to others).
+	// Sender-side sessions are stored in UserUploadSessions (not tool.SessionCache,
+	// which is for receiver-side sessions created via JoinSession in DefaultOnPrepareUpload).
+	sessionInfo := UserUploadSessions.Get(sessionId)
+	if sessionInfo.SessionId != "" {
+		tool.DefaultLogger.Infof("[CancelUpload] Cancelling push-mode upload session: %s", sessionId)
+
+		// Cancel the context first to interrupt any ongoing uploads (UserUpload / UserUploadBatch)
+		// immediately. This also removes the session from UserUploadSessions and context caches.
+		CancelUserUploadSession(sessionId)
 		boardcast.ResumeScan()
-		// get session from id.
-		sessionInfo := UserUploadSessions.Get(sessionId)
-		if sessionInfo.SessionId == "" {
-			c.JSON(http.StatusNotFound, tool.FastReturnError("Session not found or expired"))
-			return
-		}
+
+		// Send cancel request to the receiver so it cleans up its side
 		targetAddr := &net.UDPAddr{
 			IP:   net.ParseIP(sessionInfo.Target.Ipaddress).To4(),
 			Port: sessionInfo.Target.Port,
 		}
-		// get protocol
 		if err := transfer.CancelSession(targetAddr, &sessionInfo.Target.VersionMessage, sessionId); err != nil {
 			tool.DefaultLogger.Warnf("[CancelUpload] Failed to send cancel request to target: %v", err)
 		}
+
+		tool.DefaultLogger.Infof("[CancelUpload] Successfully cancelled upload session: %s", sessionId)
 		c.JSON(http.StatusOK, tool.FastReturnSuccess())
 		return
 	}
