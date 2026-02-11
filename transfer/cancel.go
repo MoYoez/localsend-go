@@ -47,6 +47,7 @@ func CancelSession(targetAddr *net.UDPAddr, remote *types.VersionMessage, sessio
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return fmt.Errorf("cancel request failed: %s", resp.Status)
 	}
+	tool.DestorySession(sessionId)
 
 	tool.DefaultLogger.Infof("Cancel request sent successfully to %s", url)
 	return nil
