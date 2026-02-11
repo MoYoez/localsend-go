@@ -633,19 +633,32 @@ func UserCancelUpload(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, tool.FastReturnError("Missing required parameter: sessionId"))
 		return
 	}
+	
+	// Try to find UserUploadSession first (push mode)
 	sessionInfo := UserUploadSessions.Get(sessionId)
-	if sessionInfo.SessionId == "" {
-		c.JSON(http.StatusNotFound, tool.FastReturnError("Session not found or expired"))
+	if sessionInfo.SessionId != "" {
+		// Push mode: cancel upload session and notify receiver
+		CancelUserUploadSession(sessionId)
+		boardcast.ResumeScan()
+		targetAddr := &net.UDPAddr{
+			IP:   net.ParseIP(sessionInfo.Target.Ipaddress).To4(),
+			Port: sessionInfo.Target.Port,
+		}
+		if err := transfer.CancelSession(targetAddr, &sessionInfo.Target.VersionMessage, sessionId); err != nil {
+			tool.DefaultLogger.Warnf("[CancelUpload] Failed to send cancel request to target: %v", err)
+		}
+		c.JSON(http.StatusOK, tool.FastReturnSuccess())
 		return
 	}
-	CancelUserUploadSession(sessionId)
-	boardcast.ResumeScan()
-	targetAddr := &net.UDPAddr{
-		IP:   net.ParseIP(sessionInfo.Target.Ipaddress).To4(),
-		Port: sessionInfo.Target.Port,
+	
+	// If not found, check if it's a ShareSession (download mode)
+	if _, ok := models.GetShareSession(sessionId); ok {
+		models.RemoveShareSession(sessionId)
+		tool.DefaultLogger.Infof("[CancelUpload] Removed share session: %s", sessionId)
+		c.JSON(http.StatusOK, tool.FastReturnSuccess())
+		return
 	}
-	if err := transfer.CancelSession(targetAddr, &sessionInfo.Target.VersionMessage, sessionId); err != nil {
-		tool.DefaultLogger.Warnf("[CancelUpload] Failed to send cancel request to target: %v", err)
-	}
-	c.JSON(http.StatusOK, tool.FastReturnSuccess())
+	
+	// Session not found in either mode
+	c.JSON(http.StatusNotFound, tool.FastReturnError("Session not found or expired"))
 }

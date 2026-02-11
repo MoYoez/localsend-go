@@ -36,6 +36,14 @@ func (ctrl *CancelController) HandleCancel(c *gin.Context) {
 
 	models.RemoveUploadSession(sessionId)
 	tool.DefaultLogger.Infof("[Cancel] Removed upload session: %s", sessionId)
+
+	// Also remove share session if exists (for download mode)
+	// in case to prevent bug.
+	if _, ok := models.GetShareSession(sessionId); ok {
+		models.RemoveShareSession(sessionId)
+		tool.DefaultLogger.Infof("[Cancel] Also removed share session: %s", sessionId)
+	}
+
 	if err := notify.SendUploadCancelledNotification(sessionId); err != nil {
 		tool.DefaultLogger.Warnf("[Cancel] Failed to send upload_cancelled notification: %v", err)
 	}
@@ -67,6 +75,14 @@ func (ctrl *CancelController) HandleCancelV1Cancel(c *gin.Context) {
 	models.RemoveUploadSession(sessionId)
 	models.RemoveV1Session(remoteAddr)
 	tool.DefaultLogger.Infof("[V1 Cancel] Removed upload session: %s and IP mapping for: %s", sessionId, remoteAddr)
+
+	// Also remove share session if exists (for download mode)
+	// in case to prevent bug.
+	if _, ok := models.GetShareSession(sessionId); ok {
+		models.RemoveShareSession(sessionId)
+		tool.DefaultLogger.Infof("[V1 Cancel] Also removed share session: %s", sessionId)
+	}
+
 	if err := notify.SendUploadCancelledNotification(sessionId); err != nil {
 		tool.DefaultLogger.Warnf("[V1 Cancel] Failed to send upload_cancelled notification: %v", err)
 	}
