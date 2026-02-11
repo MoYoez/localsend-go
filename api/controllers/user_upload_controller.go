@@ -635,11 +635,16 @@ func UserCancelUpload(c *gin.Context) {
 	}
 
 	// Try to find UserUploadSession first (push mode)
-	sessionInfo := UserUploadSessions.Get(sessionId)
-	if sessionInfo.SessionId != "" {
+	if tool.QuerySessionIsValid(sessionId) {
 		// Push mode: cancel upload session and notify receiver
-		CancelUserUploadSession(sessionId)
+		tool.DestorySession(sessionId)
 		boardcast.ResumeScan()
+		// get session from id.
+		sessionInfo := UserUploadSessions.Get(sessionId)
+		if sessionInfo.SessionId == "" {
+			c.JSON(http.StatusNotFound, tool.FastReturnError("Session not found or expired"))
+			return
+		}
 		targetAddr := &net.UDPAddr{
 			IP:   net.ParseIP(sessionInfo.Target.Ipaddress).To4(),
 			Port: sessionInfo.Target.Port,
