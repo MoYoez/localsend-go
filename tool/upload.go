@@ -30,6 +30,23 @@ func NextAvailablePath(dir, fileName string) string {
 	}
 }
 
+// NextAvailableDir returns the first directory name under dir that does not exist,
+// using folderName and if it exists, trying folderName-2, folderName-3, ...
+// Used when receiving a folder and the top-level folder name already exists.
+func NextAvailableDir(dir, folderName string) string {
+	try := filepath.Join(dir, folderName)
+	if _, err := os.Stat(try); os.IsNotExist(err) {
+		return folderName
+	}
+	for n := 2; ; n++ {
+		tryName := fmt.Sprintf("%s-%d", folderName, n)
+		try = filepath.Join(dir, tryName)
+		if _, err := os.Stat(try); os.IsNotExist(err) {
+			return tryName
+		}
+	}
+}
+
 // CopyWithContext copies from src to dst while respecting context cancellation.
 func CopyWithContext(ctx context.Context, dst io.Writer, src io.Reader) (int64, error) {
 	buf := make([]byte, 2*1024*1024) // 2MB buffer

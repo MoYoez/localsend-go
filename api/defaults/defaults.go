@@ -185,12 +185,32 @@ func DefaultOnUpload(sessionId, fileId, token string, data io.Reader, remoteAddr
 	}
 	// Preserve relative path (e.g. "foldername/subdir/file.txt") for folder uploads
 	relativePath := filepath.Clean(filepath.FromSlash(fileName))
+	sep := string(filepath.Separator)
+	firstIdx := strings.Index(relativePath, sep)
+	isFolderUpload := firstIdx >= 0
+	var targetPath string
+	if isFolderUpload {
+		firstSegment := relativePath[:firstIdx]
+		rest := relativePath[firstIdx+len(sep):]
+		resolved := models.GetResolvedReceiveFolder(sessionId, firstSegment)
+		if resolved == "" {
+			candidateDir := filepath.Join(uploadDir, firstSegment)
+			if _, err := os.Stat(candidateDir); err == nil {
+				resolved = tool.NextAvailableDir(uploadDir, firstSegment)
+			} else {
+				resolved = firstSegment
+			}
+			models.SetResolvedReceiveFolder(sessionId, firstSegment, resolved)
+		}
+		targetPath = filepath.Join(uploadDir, resolved, rest)
+	} else {
+		targetPath = filepath.Join(uploadDir, relativePath)
+	}
 	// Prevent path traversal: ensure result stays under uploadDir
 	uploadDirAbs, err := filepath.Abs(uploadDir)
 	if err != nil {
 		return fmt.Errorf("upload dir abs: %w", err)
 	}
-	targetPath := filepath.Join(uploadDir, relativePath)
 	targetPathAbs, err := filepath.Abs(targetPath)
 	if err != nil {
 		return fmt.Errorf("target path abs: %w", err)
@@ -203,7 +223,9 @@ func DefaultOnUpload(sessionId, fileId, token string, data io.Reader, remoteAddr
 	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 		return fmt.Errorf("create parent dir failed: %w", err)
 	}
-	if models.DoNotMakeSessionFolder {
+	// For single-file (non-folder) with DoNotMakeSessionFolder, use NextAvailablePath for file name collision.
+	// For folder uploads we already resolved the folder name; do not rename files inside.
+	if models.DoNotMakeSessionFolder && !isFolderUpload {
 		targetPath = tool.NextAvailablePath(filepath.Dir(targetPath), filepath.Base(targetPath))
 	}
 

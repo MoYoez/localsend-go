@@ -25,6 +25,8 @@ var (
 	uploadStats = ttlworker.NewCache[string, *types.SessionUploadStats](tool.DefaultTTL)
 	// fileSavePaths stores actual save path per (sessionId, fileId) for notifications
 	fileSavePaths = ttlworker.NewCache[string, map[string]string](tool.DefaultTTL)
+	// resolvedReceiveFolders stores resolved top-level folder name per (sessionId, firstSegment) when folder name collides
+	resolvedReceiveFolders = ttlworker.NewCache[string, map[string]string](tool.DefaultTTL)
 )
 
 func CacheUploadSession(sessionId string, files map[string]types.FileInfo) {
@@ -160,6 +162,29 @@ func GetSessionSavePaths(sessionId string) map[string]string {
 	return out
 }
 
+// GetResolvedReceiveFolder returns the cached resolved folder name for (sessionId, firstSegment), or empty string if not cached.
+func GetResolvedReceiveFolder(sessionId, firstSegment string) string {
+	uploadSessionMu.RLock()
+	defer uploadSessionMu.RUnlock()
+	m := resolvedReceiveFolders.Get(sessionId)
+	if m == nil {
+		return ""
+	}
+	return m[firstSegment]
+}
+
+// SetResolvedReceiveFolder caches the resolved folder name for (sessionId, firstSegment).
+func SetResolvedReceiveFolder(sessionId, firstSegment, resolved string) {
+	uploadSessionMu.Lock()
+	defer uploadSessionMu.Unlock()
+	m := resolvedReceiveFolders.Get(sessionId)
+	if m == nil {
+		m = make(map[string]string)
+		resolvedReceiveFolders.Set(sessionId, m)
+	}
+	m[firstSegment] = resolved
+}
+
 // CleanupSessionStats removes the upload statistics for a session
 func CleanupSessionStats(sessionId string) {
 	uploadSessionMu.Lock()
@@ -174,6 +199,7 @@ func RemoveUploadSession(sessionId string) {
 	uploadValidated.Delete(sessionId)
 	confirmRecvChans.Delete(sessionId)
 	fileSavePaths.Delete(sessionId)
+	resolvedReceiveFolders.Delete(sessionId)
 	// Cancel the session context to interrupt ongoing uploads
 	if sessCtx := sessionContexts.Get(sessionId); sessCtx != nil {
 		sessCtx.Cancel()
