@@ -633,7 +633,7 @@ func UserCancelUpload(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, tool.FastReturnError("Missing required parameter: sessionId"))
 		return
 	}
-	
+
 	// Try to find UserUploadSession first (push mode)
 	sessionInfo := UserUploadSessions.Get(sessionId)
 	if sessionInfo.SessionId != "" {
@@ -644,13 +644,14 @@ func UserCancelUpload(c *gin.Context) {
 			IP:   net.ParseIP(sessionInfo.Target.Ipaddress).To4(),
 			Port: sessionInfo.Target.Port,
 		}
+		// get protocol
 		if err := transfer.CancelSession(targetAddr, &sessionInfo.Target.VersionMessage, sessionId); err != nil {
 			tool.DefaultLogger.Warnf("[CancelUpload] Failed to send cancel request to target: %v", err)
 		}
 		c.JSON(http.StatusOK, tool.FastReturnSuccess())
 		return
 	}
-	
+
 	// If not found, check if it's a ShareSession (download mode)
 	if _, ok := models.GetShareSession(sessionId); ok {
 		models.RemoveShareSession(sessionId)
@@ -658,7 +659,7 @@ func UserCancelUpload(c *gin.Context) {
 		c.JSON(http.StatusOK, tool.FastReturnSuccess())
 		return
 	}
-	
+
 	// Session not found in either mode
 	c.JSON(http.StatusNotFound, tool.FastReturnError("Session not found or expired"))
 }
