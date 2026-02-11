@@ -632,7 +632,7 @@ batchComplete:
 }
 
 // UserCancelUpload handles cancel upload request (sender side)
-// POST /api/self/v1/cancel-upload
+// POST /api/self/v1/cancel
 func UserCancelUpload(c *gin.Context) {
 	sessionId := strings.TrimSpace(c.Query("sessionId"))
 	if sessionId == "" {
