@@ -382,6 +382,30 @@ func SendSendProgressNotification(sessionId, fileId string, success bool, errMsg
 	return SendNotification(notification, DefaultUnixSocketPath)
 }
 
+// SendSendFinishedNotification notifies Decky that the send batch has ended (completed, cancelled, or rejected).
+// reason is "completed", "cancelled", or "rejected". result can be nil.
+func SendSendFinishedNotification(sessionId, reason string, successCount, failedCount int, failedFileIds []string) error {
+	if failedFileIds == nil {
+		failedFileIds = []string{}
+	}
+	if len(failedFileIds) > MaxNotifyFiles {
+		failedFileIds = failedFileIds[:MaxNotifyFiles]
+	}
+	data := map[string]any{
+		"sessionId":     sessionId,
+		"reason":        reason,
+		"successCount":  successCount,
+		"failedCount":   failedCount,
+		"failedFileIds": failedFileIds,
+	}
+	notification := &types.Notification{
+		Type:   types.NotifyTypeSendFinished,
+		Title:  "Send Finished",
+		Data:   data,
+	}
+	return SendNotification(notification, DefaultUnixSocketPath)
+}
+
 // isPlainTextType checks if the given file type is a plain text type
 func isPlainTextType(fileType string) bool {
 	if fileType == "" {

@@ -472,11 +472,13 @@ func UserUploadBatch(c *gin.Context) {
 		IP:   net.ParseIP(sessionInfo.Target.Ipaddress).To4(),
 		Port: sessionInfo.Target.Port,
 	}
+	reason := "completed"
 
 	for _, fileItem := range request.Files {
 		fileName := ""
 		select {
 		case <-ctx.Done():
+			reason = "cancelled"
 			itemResult := types.UserUploadItemResult{FileId: fileItem.FileId, Success: false, Error: "Upload cancelled"}
 			result.Results = append(result.Results, itemResult)
 			result.Failed++
@@ -549,7 +551,18 @@ func UserUploadBatch(c *gin.Context) {
 		err = transfer.UploadFileWithContext(ctx, targetAddr, &sessionInfo.Target.VersionMessage, request.SessionId, fileItem.FileId, fileItem.Token, bytes.NewReader(fileData))
 		if err != nil {
 			if ctx.Err() != nil {
+				reason = "cancelled"
 				itemResult.Error = "Upload cancelled"
+				result.Results = append(result.Results, itemResult)
+				result.Failed++
+				if err := notify.SendSendProgressNotification(request.SessionId, fileItem.FileId, false, itemResult.Error, result.Success+result.Failed, result.Total, fileName); err != nil {
+					tool.DefaultLogger.Warnf("[Notify] Failed to send send_progress: %v", err)
+				}
+				goto batchComplete
+			}
+			if strings.Contains(err.Error(), "blocked by another session") {
+				reason = "rejected"
+				itemResult.Error = err.Error()
 				result.Results = append(result.Results, itemResult)
 				result.Failed++
 				if err := notify.SendSendProgressNotification(request.SessionId, fileItem.FileId, false, itemResult.Error, result.Success+result.Failed, result.Total, fileName); err != nil {
@@ -574,6 +587,15 @@ func UserUploadBatch(c *gin.Context) {
 	}
 batchComplete:
 	boardcast.ResumeScan()
+	failedFileIds := make([]string, 0, result.Failed)
+	for _, r := range result.Results {
+		if !r.Success && r.FileId != "" {
+			failedFileIds = append(failedFileIds, r.FileId)
+		}
+	}
+	if err := notify.SendSendFinishedNotification(request.SessionId, reason, result.Success, result.Failed, failedFileIds); err != nil {
+		tool.DefaultLogger.Warnf("[Notify] Failed to send send_finished: %v", err)
+	}
 	if result.Failed == result.Total {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "All files failed to upload", "result": result})
 	} else if result.Failed > 0 {
