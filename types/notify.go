@@ -6,6 +6,7 @@ const (
 	NotifyTypeUploadStart      = "upload_start"
 	NotifyTypeUploadEnd        = "upload_end"
 	NotifyTypeUploadProgress   = "upload_progress"
+	NotifyTypeSendProgress     = "send_progress" // sender-side: per-file progress during upload-batch
 	NotifyTypeUploadCancelled  = "upload_cancelled"
 	NotifyTypeConfirmRecv      = "confirm_recv"
 	NotifyTypeConfirmDownload  = "confirm_download"

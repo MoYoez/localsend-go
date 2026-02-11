@@ -362,6 +362,26 @@ func SendUploadProgressNotification(sessionId string, totalFiles, successFiles, 
 	return SendNotification(notification, DefaultUnixSocketPath)
 }
 
+// SendSendProgressNotification notifies Decky of send progress (sender side, during upload-batch).
+// Called after each file completes so the sender UI can show incremental progress (e.g. 1/10, 2/10).
+func SendSendProgressNotification(sessionId, fileId string, success bool, errMsg string, completedCount, totalFiles int, fileName string) error {
+	data := map[string]any{
+		"sessionId":      sessionId,
+		"fileId":         fileId,
+		"success":        success,
+		"error":          errMsg,
+		"completedCount": completedCount,
+		"totalFiles":     totalFiles,
+		"fileName":       fileName,
+	}
+	notification := &types.Notification{
+		Type:  types.NotifyTypeSendProgress,
+		Title: "Sending",
+		Data:  data,
+	}
+	return SendNotification(notification, DefaultUnixSocketPath)
+}
+
 // isPlainTextType checks if the given file type is a plain text type
 func isPlainTextType(fileType string) bool {
 	if fileType == "" {

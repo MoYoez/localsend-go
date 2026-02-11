@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/moyoez/localsend-go/api/models"
 	"github.com/moyoez/localsend-go/boardcast"
+	"github.com/moyoez/localsend-go/notify"
 	"github.com/moyoez/localsend-go/share"
 	"github.com/moyoez/localsend-go/tool"
 	"github.com/moyoez/localsend-go/transfer"
@@ -472,10 +474,15 @@ func UserUploadBatch(c *gin.Context) {
 	}
 
 	for _, fileItem := range request.Files {
+		fileName := ""
 		select {
 		case <-ctx.Done():
-			result.Results = append(result.Results, types.UserUploadItemResult{FileId: fileItem.FileId, Success: false, Error: "Upload cancelled"})
+			itemResult := types.UserUploadItemResult{FileId: fileItem.FileId, Success: false, Error: "Upload cancelled"}
+			result.Results = append(result.Results, itemResult)
 			result.Failed++
+			if err := notify.SendSendProgressNotification(request.SessionId, fileItem.FileId, false, itemResult.Error, result.Success+result.Failed, result.Total, fileName); err != nil {
+				tool.DefaultLogger.Warnf("[Notify] Failed to send send_progress: %v", err)
+			}
 			goto batchComplete
 		default:
 		}
@@ -484,6 +491,9 @@ func UserUploadBatch(c *gin.Context) {
 			itemResult.Error = "Missing required parameters: fileId, token, or fileUrl"
 			result.Results = append(result.Results, itemResult)
 			result.Failed++
+			if err := notify.SendSendProgressNotification(request.SessionId, fileItem.FileId, false, itemResult.Error, result.Success+result.Failed, result.Total, fileName); err != nil {
+				tool.DefaultLogger.Warnf("[Notify] Failed to send send_progress: %v", err)
+			}
 			continue
 		}
 		expectedToken, ok := sessionInfo.Tokens[fileItem.FileId]
@@ -491,6 +501,9 @@ func UserUploadBatch(c *gin.Context) {
 			itemResult.Error = "Invalid file ID or token"
 			result.Results = append(result.Results, itemResult)
 			result.Failed++
+			if err := notify.SendSendProgressNotification(request.SessionId, fileItem.FileId, false, itemResult.Error, result.Success+result.Failed, result.Total, fileName); err != nil {
+				tool.DefaultLogger.Warnf("[Notify] Failed to send send_progress: %v", err)
+			}
 			continue
 		}
 		parsedUrl, err := url.Parse(fileItem.FileUrl)
@@ -498,26 +511,39 @@ func UserUploadBatch(c *gin.Context) {
 			itemResult.Error = fmt.Sprintf("Invalid fileUrl: %v", err)
 			result.Results = append(result.Results, itemResult)
 			result.Failed++
+			if err := notify.SendSendProgressNotification(request.SessionId, fileItem.FileId, false, itemResult.Error, result.Success+result.Failed, result.Total, fileName); err != nil {
+				tool.DefaultLogger.Warnf("[Notify] Failed to send send_progress: %v", err)
+			}
 			continue
 		}
 		if parsedUrl.Scheme != "file" {
 			itemResult.Error = "Only file:// protocol is supported"
 			result.Results = append(result.Results, itemResult)
 			result.Failed++
+			if err := notify.SendSendProgressNotification(request.SessionId, fileItem.FileId, false, itemResult.Error, result.Success+result.Failed, result.Total, fileName); err != nil {
+				tool.DefaultLogger.Warnf("[Notify] Failed to send send_progress: %v", err)
+			}
 			continue
 		}
 		filePath := parsedUrl.Path
+		fileName = filepath.Base(filePath)
 		fileData, err := os.ReadFile(filePath)
 		if err != nil {
 			itemResult.Error = fmt.Sprintf("Failed to read file: %v", err)
 			result.Results = append(result.Results, itemResult)
 			result.Failed++
+			if err := notify.SendSendProgressNotification(request.SessionId, fileItem.FileId, false, itemResult.Error, result.Success+result.Failed, result.Total, fileName); err != nil {
+				tool.DefaultLogger.Warnf("[Notify] Failed to send send_progress: %v", err)
+			}
 			continue
 		}
 		if len(fileData) == 0 {
 			itemResult.Error = "File data is empty"
 			result.Results = append(result.Results, itemResult)
 			result.Failed++
+			if err := notify.SendSendProgressNotification(request.SessionId, fileItem.FileId, false, itemResult.Error, result.Success+result.Failed, result.Total, fileName); err != nil {
+				tool.DefaultLogger.Warnf("[Notify] Failed to send send_progress: %v", err)
+			}
 			continue
 		}
 		err = transfer.UploadFileWithContext(ctx, targetAddr, &sessionInfo.Target.VersionMessage, request.SessionId, fileItem.FileId, fileItem.Token, bytes.NewReader(fileData))
@@ -526,15 +552,24 @@ func UserUploadBatch(c *gin.Context) {
 				itemResult.Error = "Upload cancelled"
 				result.Results = append(result.Results, itemResult)
 				result.Failed++
+				if err := notify.SendSendProgressNotification(request.SessionId, fileItem.FileId, false, itemResult.Error, result.Success+result.Failed, result.Total, fileName); err != nil {
+					tool.DefaultLogger.Warnf("[Notify] Failed to send send_progress: %v", err)
+				}
 				goto batchComplete
 			}
 			itemResult.Error = fmt.Sprintf("Upload failed: %v", err)
 			result.Results = append(result.Results, itemResult)
 			result.Failed++
+			if err := notify.SendSendProgressNotification(request.SessionId, fileItem.FileId, false, itemResult.Error, result.Success+result.Failed, result.Total, fileName); err != nil {
+				tool.DefaultLogger.Warnf("[Notify] Failed to send send_progress: %v", err)
+			}
 		} else {
 			itemResult.Success = true
 			result.Results = append(result.Results, itemResult)
 			result.Success++
+			if err := notify.SendSendProgressNotification(request.SessionId, fileItem.FileId, true, "", result.Success+result.Failed, result.Total, fileName); err != nil {
+				tool.DefaultLogger.Warnf("[Notify] Failed to send send_progress: %v", err)
+			}
 		}
 	}
 batchComplete:
