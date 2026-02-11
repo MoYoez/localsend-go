@@ -18,6 +18,7 @@ import (
 
 	ttlworker "github.com/FloatTech/ttl"
 	"github.com/gin-gonic/gin"
+	"github.com/moyoez/localsend-go/api/defaults"
 	"github.com/moyoez/localsend-go/api/models"
 	"github.com/moyoez/localsend-go/boardcast"
 	"github.com/moyoez/localsend-go/notify"
@@ -669,6 +670,28 @@ func UserCancelUpload(c *gin.Context) {
 	if _, ok := models.GetShareSession(sessionId); ok {
 		models.RemoveShareSession(sessionId)
 		tool.DefaultLogger.Infof("[CancelUpload] Removed share session: %s", sessionId)
+		c.JSON(http.StatusOK, tool.FastReturnSuccess())
+		return
+	}
+
+	// Receiver side: we are receiving files and user clicked cancel. Session lives in receiver's
+	// upload session (tool.SessionCache / models). Cancel it the same way as when sender sends cancel.
+	if tool.QuerySessionIsValid(sessionId) {
+		tool.DefaultLogger.Infof("[CancelUpload] Cancelling receive-mode session: %s", sessionId)
+		if err := defaults.DefaultOnCancel(sessionId); err != nil {
+			tool.DefaultLogger.Errorf("[CancelUpload] Cancel callback error: %v", err)
+			c.JSON(http.StatusInternalServerError, tool.FastReturnError("Internal server error"))
+			return
+		}
+		models.RemoveUploadSession(sessionId)
+		if _, ok := models.GetShareSession(sessionId); ok {
+			models.RemoveShareSession(sessionId)
+			tool.DefaultLogger.Infof("[CancelUpload] Also removed share session: %s", sessionId)
+		}
+		if err := notify.SendUploadCancelledNotification(sessionId); err != nil {
+			tool.DefaultLogger.Warnf("[CancelUpload] Failed to send upload_cancelled notification: %v", err)
+		}
+		boardcast.ResumeScan()
 		c.JSON(http.StatusOK, tool.FastReturnSuccess())
 		return
 	}

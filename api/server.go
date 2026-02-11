@@ -77,7 +77,7 @@ func (s *Server) setupRoutes() *gin.Engine {
 	} else {
 		gin.SetMode(gin.ReleaseMode)
 	}
-	engine := gin.New()
+	engine := gin.Default()
 	engine.Use(middlewares.AllowAllCORS())
 	engine.Use(gin.Recovery())
 
