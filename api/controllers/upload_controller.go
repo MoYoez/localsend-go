@@ -232,6 +232,11 @@ func (ctrl *UploadController) HandleUploadV1Upload(c *gin.Context) {
 		c.JSON(http.StatusConflict, tool.FastReturnError("No active session"))
 		return
 	}
+	if models.IsSessionCancelled(sessionId) {
+		tool.DefaultLogger.Infof("[V1 Send] Upload session already cancelled: sessionId=%s", sessionId)
+		c.JSON(http.StatusConflict, tool.FastReturnError("Upload session cancelled"))
+		return
+	}
 
 	tool.DefaultLogger.Infof("[V1 Send] Received upload request: fileId=%s, token=%s, remoteAddr=%s, sessionId=%s", fileId, token, remoteAddr, sessionId)
 
@@ -355,6 +360,11 @@ func (ctrl *UploadController) HandleUpload(c *gin.Context) {
 	if sessionId == "" || fileId == "" || token == "" {
 		tool.DefaultLogger.Errorf("Missing required parameters: sessionId=%s, fileId=%s, token=%s", sessionId, fileId, token)
 		c.JSON(http.StatusBadRequest, tool.FastReturnError("Missing parameters"))
+		return
+	}
+	if models.IsSessionCancelled(sessionId) {
+		tool.DefaultLogger.Infof("[Upload] Upload session already cancelled: sessionId=%s", sessionId)
+		c.JSON(http.StatusConflict, tool.FastReturnError("Upload session cancelled"))
 		return
 	}
 

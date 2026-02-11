@@ -242,7 +242,30 @@ func DefaultOnUpload(sessionId, fileId, token string, data io.Reader, remoteAddr
 	hasher := sha256.New()
 	writer := io.MultiWriter(file, hasher)
 
-	written, err := tool.CopyWithContext(ctx, writer, data)
+	var written int64
+	// When data is io.Closer (e.g. http.Request.Body), close it on context cancel so that
+	// blocking Read() unblocks and in-flight upload can be interrupted immediately.
+	if closer, ok := data.(io.Closer); ok {
+		type copyResult struct {
+			n   int64
+			err error
+		}
+		ch := make(chan copyResult, 1)
+		go func() {
+			n, e := tool.CopyWithContext(ctx, writer, data)
+			ch <- copyResult{n, e}
+		}()
+		select {
+		case res := <-ch:
+			written, err = res.n, res.err
+		case <-ctx.Done():
+			_ = closer.Close()
+			res := <-ch
+			written, err = res.n, ctx.Err()
+		}
+	} else {
+		written, err = tool.CopyWithContext(ctx, writer, data)
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			_ = file.Close()
