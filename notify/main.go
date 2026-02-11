@@ -332,6 +332,36 @@ func SendTextReceivedNotification(from, title, content, fileName, sessionId stri
 	return SendNotification(notification, DefaultUnixSocketPath)
 }
 
+// SendUploadCancelledNotification notifies Decky that the sender cancelled the upload (receiver side).
+func SendUploadCancelledNotification(sessionId string) error {
+	notification := &types.Notification{
+		Type:    types.NotifyTypeUploadCancelled,
+		Title:   "Upload Cancelled",
+		Message: "Transfer was cancelled by the sender",
+		Data: map[string]any{
+			"sessionId": sessionId,
+		},
+	}
+	return SendNotification(notification, DefaultUnixSocketPath)
+}
+
+// SendUploadProgressNotification notifies Decky of receive progress (receiver side).
+func SendUploadProgressNotification(sessionId string, totalFiles, successFiles, failedFiles int, currentFileName string) error {
+	data := map[string]any{
+		"sessionId":       sessionId,
+		"totalFiles":      totalFiles,
+		"successFiles":    successFiles,
+		"failedFiles":     failedFiles,
+		"currentFileName": currentFileName,
+	}
+	notification := &types.Notification{
+		Type:   types.NotifyTypeUploadProgress,
+		Title:  "Receiving",
+		Data:   data,
+	}
+	return SendNotification(notification, DefaultUnixSocketPath)
+}
+
 // isPlainTextType checks if the given file type is a plain text type
 func isPlainTextType(fileType string) bool {
 	if fileType == "" {

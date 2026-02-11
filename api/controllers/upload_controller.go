@@ -246,6 +246,11 @@ func (ctrl *UploadController) HandleUploadV1Upload(c *gin.Context) {
 		remaining, isLast, stats := models.MarkFileUploadedAndCheckComplete(sessionId, fileId, false)
 		tool.DefaultLogger.Infof("[V1 Send] File failed: %s, remaining files: %d, isLast: %v", fileId, remaining, isLast)
 
+		if !isLast && stats != nil {
+			if err := notify.SendUploadProgressNotification(sessionId, stats.TotalFiles, stats.SuccessFiles, stats.FailedFiles, ""); err != nil {
+				tool.DefaultLogger.Warnf("[V1 Notify] Failed to send upload_progress: %v", err)
+			}
+		}
 		if isLast {
 			boardcast.ResumeScan()
 		}
@@ -300,6 +305,11 @@ func (ctrl *UploadController) HandleUploadV1Upload(c *gin.Context) {
 	remaining, isLast, stats := models.MarkFileUploadedAndCheckComplete(sessionId, fileId, true)
 	tool.DefaultLogger.Infof("[V1 Send] File completed: %s, remaining files: %d, isLast: %v", fileInfo.FileName, remaining, isLast)
 
+	if !isLast && stats != nil {
+		if err := notify.SendUploadProgressNotification(sessionId, stats.TotalFiles, stats.SuccessFiles, stats.FailedFiles, fileInfo.FileName); err != nil {
+			tool.DefaultLogger.Warnf("[V1 Notify] Failed to send upload_progress: %v", err)
+		}
+	}
 	if isLast {
 		boardcast.ResumeScan()
 	}
@@ -371,6 +381,11 @@ func (ctrl *UploadController) HandleUpload(c *gin.Context) {
 		remaining, isLast, stats := models.MarkFileUploadedAndCheckComplete(sessionId, fileId, false)
 		tool.DefaultLogger.Infof("[Upload] File failed: %s, remaining files: %d, isLast: %v", fileId, remaining, isLast)
 
+		if !isLast && stats != nil {
+			if err := notify.SendUploadProgressNotification(sessionId, stats.TotalFiles, stats.SuccessFiles, stats.FailedFiles, ""); err != nil {
+				tool.DefaultLogger.Warnf("[Notify] Failed to send upload_progress: %v", err)
+			}
+		}
 		if isLast {
 			boardcast.ResumeScan()
 		}
@@ -422,6 +437,11 @@ func (ctrl *UploadController) HandleUpload(c *gin.Context) {
 	remaining, isLast, stats := models.MarkFileUploadedAndCheckComplete(sessionId, fileId, true)
 	tool.DefaultLogger.Infof("[Upload] File completed: %s, remaining files: %d, isLast: %v", fileInfo.FileName, remaining, isLast)
 
+	if !isLast && stats != nil {
+		if err := notify.SendUploadProgressNotification(sessionId, stats.TotalFiles, stats.SuccessFiles, stats.FailedFiles, fileInfo.FileName); err != nil {
+			tool.DefaultLogger.Warnf("[Notify] Failed to send upload_progress: %v", err)
+		}
+	}
 	if isLast {
 		boardcast.ResumeScan()
 	}

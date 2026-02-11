@@ -5,6 +5,8 @@ package types
 const (
 	NotifyTypeUploadStart      = "upload_start"
 	NotifyTypeUploadEnd        = "upload_end"
+	NotifyTypeUploadProgress   = "upload_progress"
+	NotifyTypeUploadCancelled  = "upload_cancelled"
 	NotifyTypeConfirmRecv      = "confirm_recv"
 	NotifyTypeConfirmDownload  = "confirm_download"
 	NotifyTypePinRequired      = "pin_required"

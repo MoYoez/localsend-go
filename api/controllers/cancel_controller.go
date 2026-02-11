@@ -6,6 +6,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/moyoez/localsend-go/api/defaults"
 	"github.com/moyoez/localsend-go/api/models"
+	"github.com/moyoez/localsend-go/boardcast"
+	"github.com/moyoez/localsend-go/notify"
 	"github.com/moyoez/localsend-go/tool"
 )
 
@@ -34,6 +36,10 @@ func (ctrl *CancelController) HandleCancel(c *gin.Context) {
 
 	models.RemoveUploadSession(sessionId)
 	tool.DefaultLogger.Infof("[Cancel] Removed upload session: %s", sessionId)
+	if err := notify.SendUploadCancelledNotification(sessionId); err != nil {
+		tool.DefaultLogger.Warnf("[Cancel] Failed to send upload_cancelled notification: %v", err)
+	}
+	boardcast.ResumeScan()
 	c.Status(http.StatusOK)
 }
 
@@ -61,6 +67,9 @@ func (ctrl *CancelController) HandleCancelV1Cancel(c *gin.Context) {
 	models.RemoveUploadSession(sessionId)
 	models.RemoveV1Session(remoteAddr)
 	tool.DefaultLogger.Infof("[V1 Cancel] Removed upload session: %s and IP mapping for: %s", sessionId, remoteAddr)
-
+	if err := notify.SendUploadCancelledNotification(sessionId); err != nil {
+		tool.DefaultLogger.Warnf("[V1 Cancel] Failed to send upload_cancelled notification: %v", err)
+	}
+	boardcast.ResumeScan()
 	c.Status(http.StatusOK)
 }
