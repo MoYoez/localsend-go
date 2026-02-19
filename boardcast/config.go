@@ -171,7 +171,7 @@ func getCachedNetworkIPs() ([]string, error) {
 	// Build a cache key: include interface config + addresses (for change detection)
 	var keyBuilder strings.Builder
 	keyBuilder.WriteString("li:")
-	keyBuilder.WriteString(fmt.Sprint(listenAllInterfaces))
+	fmt.Fprint(&keyBuilder, listenAllInterfaces)
 	keyBuilder.WriteString(";rif:")
 	keyBuilder.WriteString(referNetworkInterface)
 	keyBuilder.WriteString(";")
