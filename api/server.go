@@ -232,7 +232,11 @@ func (s *Server) setupRoutes() *gin.Engine {
 					c.Status(http.StatusNotFound)
 					return
 				}
-				defer f.Close()
+				defer func() {
+					if err := f.Close(); err != nil {
+						tool.DefaultLogger.Errorf("Failed to close file: %v", err)
+					}
+				}()
 				data, err := io.ReadAll(f)
 				if err != nil {
 					c.Status(http.StatusInternalServerError)
