@@ -3,8 +3,12 @@
 import { useCallback, useState } from "react";
 import { useLanguage } from "../../context/LanguageContext";
 import { getApiBase } from "../../utils/apiBase";
-import { apiPost, apiDelete } from "../../utils/api";
+import { apiPostForm, apiDelete } from "../../utils/api";
 import { LuX } from "react-icons/lu";
+
+export type ShareSelectedItem =
+  | { type: "file"; id: string; file: File }
+  | { type: "text"; id: string; fileName: string; textContent: string };
 
 interface ShareSessionItem {
   sessionId: string;
@@ -12,7 +16,11 @@ interface ShareSessionItem {
   createdAt: number;
 }
 
-export function ShareSection() {
+interface ShareSectionProps {
+  selectedItems: ShareSelectedItem[];
+}
+
+export function ShareSection({ selectedItems }: ShareSectionProps) {
   const { t } = useLanguage();
   const [sessions, setSessions] = useState<ShareSessionItem[]>([]);
   const [pin, setPin] = useState("");
@@ -23,13 +31,24 @@ export function ShareSection() {
   const [modalSession, setModalSession] = useState<ShareSessionItem | null>(null);
 
   const handleCreateSession = useCallback(async () => {
+    if (selectedItems.length === 0) {
+      setError(t("share.selectFilesFirst"));
+      return;
+    }
     setLoading(true);
     setError(null);
-    const { data, status } = await apiPost("/api/self/v1/create-share-session", {
-      files: {},
-      pin: pin.trim(),
-      autoAccept,
-    });
+    const formData = new FormData();
+    formData.append("pin", pin.trim());
+    formData.append("autoAccept", String(autoAccept));
+    for (const it of selectedItems) {
+      if (it.type === "file") {
+        formData.append(it.id, it.file);
+      } else {
+        const file = new File([it.textContent], it.fileName, { type: "text/plain" });
+        formData.append(it.id, file);
+      }
+    }
+    const { data, status } = await apiPostForm("/api/self/v1/create-share-session", formData);
     setLoading(false);
     if (status !== 200) {
       const err = (data as { error?: string })?.error ?? "Failed to create session";
@@ -53,7 +72,7 @@ export function ShareSection() {
     setSessions((prev) => [newSession, ...prev]);
     setError(null);
     setModalSession(newSession);
-  }, [pin, autoAccept]);
+  }, [pin, autoAccept, selectedItems, t]);
 
   const handleCloseSession = useCallback(async (sessionId: string) => {
     const { status } = await apiDelete(
@@ -88,7 +107,7 @@ export function ShareSection() {
         {t("share.createSessionDesc")}
       </p>
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
-        {t("share.requiresFilesNote")}
+        {t("share.useSelectedFilesNote")}
       </p>
       <div className="flex flex-wrap gap-4 items-center">
         <div>

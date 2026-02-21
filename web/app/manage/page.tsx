@@ -140,9 +140,52 @@ export default function ManagePage() {
     e.target.value = "";
   };
 
+  const handleFolderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    const newItems: SelectedItem[] = files.map((file, i) => ({
+      type: "file" as const,
+      id: `f-${Date.now()}-${i}-${(file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name}-${Math.random().toString(16).slice(2, 6)}`,
+      file,
+    }));
+    setSelectedItems((prev) => [...prev, ...newItems]);
+    e.target.value = "";
+  };
+
   const removeItem = (id: string) => {
     setSelectedItems((prev) => prev.filter((it) => it.id !== id));
   };
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const dt = e.clipboardData;
+    if (!dt) return;
+    const newItems: SelectedItem[] = [];
+    let hasFileOrImage = false;
+    for (const item of dt.items) {
+      if (item.kind === "file") {
+        const file = item.getAsFile();
+        if (!file) continue;
+        hasFileOrImage = true;
+        newItems.push({
+          type: "file",
+          id: `f-paste-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+          file,
+        });
+      }
+    }
+    const pastedText = dt.getData("text/plain")?.trim() ?? "";
+    if (pastedText) {
+      newItems.push({
+        type: "text",
+        id: `text-paste-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        fileName: "pasted.txt",
+        textContent: pastedText,
+      });
+    }
+    if (newItems.length > 0) {
+      e.preventDefault();
+      setSelectedItems((prev) => [...prev, ...newItems]);
+    }
+  }, []);
 
   const getOnlineFavorites = useCallback(() => {
     return favorites.map((fav) => {
@@ -432,8 +475,13 @@ export default function ManagePage() {
       )}
 
       {/* Files & send */}
-      <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
+      <section
+        className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4"
+        tabIndex={0}
+        onPaste={handlePaste}
+      >
         <h2 className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-4">{t("manage.files")}</h2>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-2">{t("manage.pasteHint")}</p>
         <div className="flex flex-wrap gap-2 mb-3">
           <input
             type="file"
@@ -447,6 +495,20 @@ export default function ManagePage() {
             className="flex items-center gap-2 rounded-md border border-zinc-300 dark:border-zinc-600 px-4 py-2 text-sm font-medium cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800"
           >
             {t("manage.chooseFiles")}
+          </label>
+          <input
+            type="file"
+            id="manage-folder-input"
+            className="hidden"
+            {...({ webkitDirectory: true, directory: true } as React.InputHTMLAttributes<HTMLInputElement>)}
+            multiple
+            onChange={handleFolderSelect}
+          />
+          <label
+            htmlFor="manage-folder-input"
+            className="flex items-center gap-2 rounded-md border border-zinc-300 dark:border-zinc-600 px-4 py-2 text-sm font-medium cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          >
+            {t("manage.chooseFolder")}
           </label>
           <button
             type="button"
@@ -462,18 +524,20 @@ export default function ManagePage() {
           <>
             <ul className="max-h-40 overflow-y-auto space-y-1 mb-3">
               {selectedItems.map((it) => (
-                <li key={it.id} className="flex items-center justify-between text-sm">
-                  <span className="truncate">
+                <li key={it.id} className="flex items-center justify-between text-sm gap-2">
+                  <span className="truncate min-w-0">
                     {it.type === "file" ? it.file.name : it.fileName}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => removeItem(it.id)}
-                    disabled={uploading}
-                    className="ml-2 rounded p-1 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 disabled:opacity-50"
-                  >
-                    <LuX className="w-4 h-4" />
-                  </button>
+                  <span className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => removeItem(it.id)}
+                      disabled={uploading}
+                      className="rounded p-1 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 disabled:opacity-50"
+                    >
+                      <LuX className="w-4 h-4" />
+                    </button>
+                  </span>
                 </li>
               ))}
             </ul>
@@ -529,7 +593,7 @@ export default function ManagePage() {
       )}
 
       {/* Share link section at bottom of manage page; content shown in modal */}
-      <ShareSection />
+      <ShareSection selectedItems={selectedItems} />
 
       {/* PIN prompt */}
       {pinPrompt && (

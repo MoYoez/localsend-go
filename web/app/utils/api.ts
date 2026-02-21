@@ -63,6 +63,20 @@ export async function apiPost(
   }
 }
 
+/** POST path with FormData (multipart/form-data). Does not set Content-Type so browser sets boundary. */
+export async function apiPostForm(path: string, formData: FormData): Promise<ApiResult> {
+  const base = getApiBase();
+  if (!base) return { data: { error: "No API base" }, status: 0 };
+  try {
+    const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
+    const res = await fetch(url, { method: "POST", body: formData });
+    const data = await parseResponse(res);
+    return { data, status: res.status };
+  } catch (e) {
+    return { data: { error: String(e) }, status: 500 };
+  }
+}
+
 /** PATCH path with JSON body; returns { data, status }. Does not throw. */
 export async function apiPatch(path: string, json: object): Promise<ApiResult> {
   const base = getApiBase();

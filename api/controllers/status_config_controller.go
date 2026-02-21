@@ -83,10 +83,11 @@ func UserConfigPatch(c *gin.Context) {
 	if body.Announce != nil {
 		cfg.Announce = *body.Announce
 	}
-	if body.CertPEM != nil {
+	// Do not overwrite cert/key with empty to avoid wiping TLS config when frontend sends incomplete body
+	if body.CertPEM != nil && *body.CertPEM != "" {
 		cfg.CertPEM = *body.CertPEM
 	}
-	if body.KeyPEM != nil {
+	if body.KeyPEM != nil && *body.KeyPEM != "" {
 		cfg.KeyPEM = *body.KeyPEM
 	}
 	if body.AutoSaveFromFavorites != nil {

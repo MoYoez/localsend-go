@@ -1,6 +1,7 @@
 package models
 
 import (
+	"os"
 	"sync"
 	"time"
 
@@ -16,9 +17,26 @@ const (
 var (
 	shareSessionMu        sync.RWMutex
 	shareSessions         = ttlworker.NewCache[string, *types.ShareSession](ShareSessionTTL)
-	confirmDownloadChans  = ttlworker.NewCache[string, chan types.ConfirmResult](tool.DefaultTTL)
+	shareSessionTempDirs  = make(map[string]string) // sessionId -> temp dir path (for upload-backed sessions)
+	confirmDownloadChans = ttlworker.NewCache[string, chan types.ConfirmResult](tool.DefaultTTL)
 	confirmedDownloadSess = ttlworker.NewCache[string, bool](ShareSessionTTL) // confirmed sessions.
 )
+
+// RegisterShareSessionTempDir registers a temp directory for a share session (created from multipart upload). Removed on RemoveShareSession.
+func RegisterShareSessionTempDir(sessionId, tempDir string) {
+	shareSessionMu.Lock()
+	defer shareSessionMu.Unlock()
+	shareSessionTempDirs[sessionId] = tempDir
+}
+
+func removeShareSessionTempDirUnlocked(sessionId string) {
+	if dir, ok := shareSessionTempDirs[sessionId]; ok {
+		delete(shareSessionTempDirs, sessionId)
+		if dir != "" {
+			_ = os.RemoveAll(dir)
+		}
+	}
+}
 
 // CacheShareSession stores a share session
 func CacheShareSession(session *types.ShareSession) {
@@ -45,9 +63,11 @@ func confirmKey(sessionId, clientKey string) string {
 }
 
 // RemoveShareSession removes a share session (confirm caches use per-client keys and will TTL out).
+// If the session had an associated temp dir (multipart upload), it is deleted.
 func RemoveShareSession(sessionId string) {
 	shareSessionMu.Lock()
 	defer shareSessionMu.Unlock()
+	removeShareSessionTempDirUnlocked(sessionId)
 	shareSessions.Delete(sessionId)
 }
 
