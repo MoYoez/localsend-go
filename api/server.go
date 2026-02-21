@@ -117,14 +117,18 @@ func serveNextJSStaticFS(webFS fs.FS) gin.HandlerFunc {
 		// Try path.html
 		htmlFile := path + ".html"
 		if f, err := webFS.Open(htmlFile); err == nil {
-			f.Close()
+			if err := f.Close(); err != nil {
+				tool.DefaultLogger.Errorf("Failed to close file: %v", err)
+			}
 			c.FileFromFS(htmlFile, http.FS(webFS))
 			return
 		}
 		// Try path/index.html
 		indexInDir := filepath.Join(path, "index.html")
 		if f, err := webFS.Open(indexInDir); err == nil {
-			f.Close()
+			if err := f.Close(); err != nil {
+				tool.DefaultLogger.Errorf("Failed to close file: %v", err)
+			}
 			c.FileFromFS(indexInDir, http.FS(webFS))
 			return
 		}
@@ -209,7 +213,7 @@ func (s *Server) setupRoutes() *gin.Engine {
 		self.DELETE("/close-share-session", controllers.UserCloseShareSession)    // Close share session
 		self.GET("/create-qr-code", controllers.GenerateQRCode)                   // QR code PNG (same params as api.qrserver.com)
 		self.GET("/get-user-screenshot", controllers.GetUserScreenShot)           // made screenshot in frontend.
-		self.GET("/status", controllers.UserStatus)       // Running and notify_ws_enabled for web UI
+		self.GET("/status", controllers.UserStatus)                               // Running and notify_ws_enabled for web UI
 		if hub := models.GetNotifyHub(); notify.NotifyWSEnabled() && hub != nil {
 			self.GET("/notify-ws", controllers.HandleNotifyWS(hub))
 		}
