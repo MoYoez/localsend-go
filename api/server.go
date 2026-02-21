@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"os"
@@ -224,10 +225,23 @@ func (s *Server) setupRoutes() *gin.Engine {
 	// Serve Next.js static export (when Download enabled): prefer embedded FS, else disk
 	if selfDevice := models.GetSelfDevice(); selfDevice != nil && selfDevice.Download {
 		if embeddedWebFS != nil {
-			// Serve from embedded FS (web/out embedded at build time)
-			engine.GET("/", func(c *gin.Context) {
-				c.FileFromFS("index.html", http.FS(embeddedWebFS))
-			})
+			// Serve from embedded FS (web/out embedded at build time). Serve index.html via Data to avoid 301 redirect (gin#2654).
+			serveIndexFromEmbed := func(c *gin.Context) {
+				f, err := embeddedWebFS.Open("index.html")
+				if err != nil {
+					c.Status(http.StatusNotFound)
+					return
+				}
+				defer f.Close()
+				data, err := io.ReadAll(f)
+				if err != nil {
+					c.Status(http.StatusInternalServerError)
+					return
+				}
+				c.Data(http.StatusOK, "text/html; charset=utf-8", data)
+			}
+			engine.GET("/", serveIndexFromEmbed)
+			engine.GET("/index.html", serveIndexFromEmbed)
 			if subNext, err := fs.Sub(embeddedWebFS, "_next"); err == nil {
 				engine.StaticFS("/_next", http.FS(subNext))
 			}

@@ -16,7 +16,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download web artifact (for embed)
+      - name: Download web artifact
         uses: actions/download-artifact@v4
         with:
           name: web
@@ -29,7 +29,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.4'
+          go-version: '1.25.7'
       
       - name: Golangci-lint
         uses: golangci/golangci-lint-action@v9.2.0
@@ -45,11 +45,24 @@ jobs:
             go build -ldflags "-s -w -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o dist/${{ github.event.repository.name }}-${{ matrix.goos }}-${{ matrix.goarch }}
           fi
 
+      - name: Create zip artifact
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          REPO="${{ github.event.repository.name }}"
+          ZIP="dist/${REPO}-${GOOS}-${GOARCH}.zip"
+          if [ "$GOOS" = "windows" ]; then
+            zip -j "$ZIP" "dist/${REPO}-${GOOS}-${GOARCH}.exe"
+          else
+            zip -j "$ZIP" "dist/${REPO}-${GOOS}-${GOARCH}"
+          fi
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.event.repository.name }}-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/*
+          path: dist/*.zip
 
   build-web:
     runs-on: ubuntu-latest
