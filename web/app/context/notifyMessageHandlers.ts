@@ -3,6 +3,8 @@
 import type {
   NotifyMessage,
   NotifyState,
+  ReceiveHistoryItem,
+  ScanDevice,
 } from "../types";
 
 type SetNotifyState = React.Dispatch<React.SetStateAction<NotifyState>>;
@@ -14,7 +16,36 @@ type NotifyHandler = (
   addToast: AddToast
 ) => void;
 
+function mergeDeviceIntoList(list: ScanDevice[], device: ScanDevice): ScanDevice[] {
+  const fp = device.fingerprint;
+  if (!fp) return list;
+  const next: ScanDevice = {
+    fingerprint: device.fingerprint,
+    alias: device.alias,
+    ip_address: device.ip_address,
+    port: device.port,
+    protocol: device.protocol,
+    deviceType: device.deviceType,
+    deviceModel: device.deviceModel,
+  };
+  const idx = list.findIndex((d) => d.fingerprint === fp);
+  if (idx >= 0) {
+    const out = [...list];
+    out[idx] = { ...out[idx], ...next };
+    return out;
+  }
+  return [...list, next];
+}
+
 const handlers: Record<string, NotifyHandler> = {
+  device_discovered(msg, setState, _addToast) {
+    const d = (msg.data ?? {}) as ScanDevice;
+    setState((s) => ({ ...s, devices: mergeDeviceIntoList(s.devices ?? [], d) }));
+  },
+  device_updated(msg, setState, _addToast) {
+    const d = (msg.data ?? {}) as ScanDevice;
+    setState((s) => ({ ...s, devices: mergeDeviceIntoList(s.devices ?? [], d) }));
+  },
   confirm_recv(msg, setState, _addToast) {
     const d = msg.data ?? {};
     setState((s) => ({
@@ -48,15 +79,29 @@ const handlers: Record<string, NotifyHandler> = {
 
   text_received(msg, setState, _addToast) {
     const d = msg.data ?? {};
-    setState((s) => ({
-      ...s,
-      textReceived: {
+    const title = String(d.title ?? msg.title ?? "Text Received");
+    const content = String(d.content ?? msg.message ?? "");
+    const fileName = String(d.fileName ?? "");
+    setState((s) => {
+      const textReceived = {
         sessionId: String(d.sessionId ?? ""),
-        title: String(d.title ?? msg.title ?? "Text Received"),
-        content: String(d.content ?? msg.message ?? ""),
-        fileName: String(d.fileName ?? ""),
-      },
-    }));
+        title,
+        content,
+        fileName,
+      };
+      const historyItem: ReceiveHistoryItem = {
+        id: `rh-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        timestamp: Date.now(),
+        title,
+        folderPath: "",
+        fileCount: 1,
+        files: [fileName],
+        isText: true,
+        textContent: content,
+      };
+      const list = [...(s.receiveHistory ?? []), historyItem].slice(-100);
+      return { ...s, textReceived, receiveHistory: list };
+    });
   },
 
   upload_start(msg, setState, _addToast) {
@@ -90,11 +135,31 @@ const handlers: Record<string, NotifyHandler> = {
 
   upload_end(msg, setState, _addToast) {
     const d = msg.data ?? {};
-    setState((s) => ({
-      ...s,
-      receiveProgress:
-        s.receiveProgress?.sessionId === d.sessionId ? null : s.receiveProgress,
-    }));
+    const sessionId = String(d.sessionId ?? "");
+    const uploadFolder = String((d as { uploadFolder?: string }).uploadFolder ?? "");
+    const savedFileNamesRaw = (d as { savedFileNames?: string[] | unknown[] }).savedFileNames;
+    const savedFileNames = Array.isArray(savedFileNamesRaw)
+      ? (savedFileNamesRaw as unknown[]).map((x) => String(x))
+      : [];
+    const totalFiles = Number(d.totalFiles ?? 0);
+    const isTextOnly = !!(msg as { isTextOnly?: boolean }).isTextOnly;
+    setState((s) => {
+      const receiveProgress =
+        s.receiveProgress?.sessionId === sessionId ? null : s.receiveProgress;
+      if (isTextOnly || (totalFiles === 0 && savedFileNames.length === 0)) {
+        return { ...s, receiveProgress };
+      }
+      const historyItem: ReceiveHistoryItem = {
+        id: `rh-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        timestamp: Date.now(),
+        title: (msg.title as string) || "File Received",
+        folderPath: uploadFolder,
+        fileCount: totalFiles || savedFileNames.length,
+        files: savedFileNames,
+      };
+      const list = [...(s.receiveHistory ?? []), historyItem].slice(-100);
+      return { ...s, receiveProgress, receiveHistory: list };
+    });
   },
 
   upload_cancelled(msg, setState, addToast) {

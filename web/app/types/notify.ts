@@ -40,10 +40,36 @@ export interface ReceiveProgressState {
   currentFileName: string;
 }
 
+/** Scanned device (for device list from WebSocket or scan API). */
+export interface ScanDevice {
+  alias?: string;
+  ip_address?: string;
+  deviceModel?: string;
+  deviceType?: string;
+  fingerprint?: string;
+  port?: number;
+  protocol?: string;
+}
+
+/** Single receive history entry (stored in localStorage). */
+export interface ReceiveHistoryItem {
+  id: string;
+  timestamp: number;
+  title: string;
+  folderPath: string;
+  fileCount: number;
+  files: string[];
+  isText?: boolean;
+  textContent?: string;
+}
+
 export interface NotifyState {
   confirmRecv: ConfirmRecvState | null;
   confirmDownload: ConfirmDownloadState | null;
   textReceived: TextReceivedState | null;
   receiveProgress: ReceiveProgressState | null;
   toasts: { id: number; title: string; body: string }[];
+  receiveHistory: ReceiveHistoryItem[];
+  /** Device list (updated by scan API and WebSocket device_discovered/device_updated). */
+  devices: ScanDevice[];
 }

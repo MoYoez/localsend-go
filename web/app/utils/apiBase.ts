@@ -11,3 +11,13 @@ export function getWsBase(): string {
   const base = getApiBase();
   return base.replace(/^http/, "ws");
 }
+
+/** True when the current page is from the same origin as the API (not opened from another link). */
+export function isSameOriginAsApi(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    return new URL(getApiBase()).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
