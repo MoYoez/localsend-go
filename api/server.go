@@ -4,10 +4,8 @@ import (
 	"crypto/tls"
 	"encoding/pem"
 	"fmt"
-	"io"
 	"io/fs"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -56,85 +54,24 @@ func SetEmbeddedWebFS(f fs.FS) {
 	embeddedWebFS = f
 }
 
+// embeddedPathExists returns true if name exists as file or as dir (with index.html) in the FS.
+func embeddedPathExists(f fs.FS, name string) bool {
+	if name == "" || name == "." {
+		_, err := fs.Stat(f, "index.html")
+		return err == nil
+	}
+	name = strings.TrimPrefix(name, "/")
+	_, err := fs.Stat(f, name)
+	if err == nil {
+		return true
+	}
+	_, err = fs.Stat(f, name+"/index.html")
+	return err == nil
+}
+
 // SetSelfDevice sets the local device info used for user-side scanning.
 func SetSelfDevice(device *types.VersionMessage) {
 	models.SetSelfDevice(device)
-}
-
-// serveNextJSStatic returns a Gin NoRoute handler that serves Next.js static export sub-routes.
-// Next.js with trailingSlash: false outputs e.g. manage.html for /manage; with trailingSlash: true, manage/index.html.
-// Tries path.html, then path/index.html; otherwise serves indexPage (SPA fallback).
-func serveNextJSStatic(webRoot, indexPage string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
-			c.Status(http.StatusMethodNotAllowed)
-			return
-		}
-		path := strings.TrimPrefix(c.Request.URL.Path, "/")
-		path = strings.TrimSuffix(path, "/")
-		if path == "" {
-			c.File(indexPage)
-			return
-		}
-		// Prevent path traversal
-		if strings.Contains(path, "..") {
-			c.File(indexPage)
-			return
-		}
-		// Try path.html (Next.js trailingSlash: false)
-		htmlFile := filepath.Join(webRoot, path+".html")
-		if _, err := os.Stat(htmlFile); err == nil {
-			c.File(htmlFile)
-			return
-		}
-		// Try path/index.html (directory-style export)
-		indexInDir := filepath.Join(webRoot, path, "index.html")
-		if _, err := os.Stat(indexInDir); err == nil {
-			c.File(indexInDir)
-			return
-		}
-		// SPA fallback: serve root index so client-side router can handle it
-		c.File(indexPage)
-	}
-}
-
-// serveNextJSStaticFS returns a Gin NoRoute handler that serves from embedded FS (same route rules as serveNextJSStatic).
-func serveNextJSStaticFS(webFS fs.FS) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
-			c.Status(http.StatusMethodNotAllowed)
-			return
-		}
-		path := strings.TrimPrefix(c.Request.URL.Path, "/")
-		path = strings.TrimSuffix(path, "/")
-		if path == "" {
-			c.FileFromFS("index.html", http.FS(webFS))
-			return
-		}
-		if strings.Contains(path, "..") {
-			c.FileFromFS("index.html", http.FS(webFS))
-			return
-		}
-		// Try path.html
-		htmlFile := path + ".html"
-		if f, err := webFS.Open(htmlFile); err == nil {
-			if err := f.Close(); err != nil {
-				tool.DefaultLogger.Errorf("Failed to close file: %v", err)
-			}
-			c.FileFromFS(htmlFile, http.FS(webFS))
-			return
-		}
-		// Try path/index.html
-		indexInDir := filepath.Join(path, "index.html")
-		if f, err := webFS.Open(indexInDir); err == nil {
-			if err := f.Close(); err != nil {
-				tool.DefaultLogger.Errorf("Failed to close file: %v", err)
-			}
-			c.FileFromFS(indexInDir, http.FS(webFS))
-			return
-		}
-		c.FileFromFS("index.html", http.FS(webFS))
-	}
 }
 
 // SetDefaultUploadFolder sets the default upload folder (used by main for flag override).
@@ -169,7 +106,7 @@ func (s *Server) setupRoutes() *gin.Engine {
 	uploadCtrl := controllers.NewUploadController()
 	cancelCtrl := controllers.NewCancelController()
 
-	// Register API endpoints
+	// Register API endpoints first so /api takes precedence
 	v2 := engine.Group("/api/localsend/v2")
 	{
 		v2.GET("/info", controllers.HandleLocalsendV2InfoGet)
@@ -222,51 +159,42 @@ func (s *Server) setupRoutes() *gin.Engine {
 		self.PATCH("/config", controllers.UserConfigPatch)
 	}
 
-	// Serve Next.js static export (when Download enabled): prefer embedded FS, else disk
-	if selfDevice := models.GetSelfDevice(); selfDevice != nil && selfDevice.Download {
-		if embeddedWebFS != nil {
-			// Serve from embedded FS (web/out embedded at build time). Serve index.html via Data to avoid 301 redirect (gin#2654).
-			serveIndexFromEmbed := func(c *gin.Context) {
-				f, err := embeddedWebFS.Open("index.html")
-				if err != nil {
-					c.Status(http.StatusNotFound)
+	// Serve embedded Next.js static export. For app routes (/manage, /manage/settings, etc.) serve index.html
+	// directly so no 301 redirect happens when opening the link directly.
+	if selfDevice := models.GetSelfDevice(); selfDevice != nil && selfDevice.Download && embeddedWebFS != nil {
+		fileServer := http.FileServer(http.FS(embeddedWebFS))
+		engine.NoRoute(gin.WrapF(func(w http.ResponseWriter, r *http.Request) {
+			path := strings.TrimPrefix(r.URL.Path, "/")
+
+			// Clean the path
+			if path == "" {
+				path = "index.html"
+			}
+
+			// Check if it's a static file (has extension like .js, .css, .png, etc.)
+			// Static assets should be served directly if they exist
+			if ext := filepath.Ext(path); ext != "" && ext != ".html" {
+				if embeddedPathExists(embeddedWebFS, path) {
+					fileServer.ServeHTTP(w, r)
 					return
 				}
-				defer func() {
-					if err := f.Close(); err != nil {
-						tool.DefaultLogger.Errorf("Failed to close file: %v", err)
-					}
-				}()
-				data, err := io.ReadAll(f)
-				if err != nil {
-					c.Status(http.StatusInternalServerError)
-					return
-				}
-				c.Data(http.StatusOK, "text/html; charset=utf-8", data)
+				// Static asset not found
+				http.NotFound(w, r)
+				return
 			}
-			engine.GET("/", serveIndexFromEmbed)
-			engine.GET("/index.html", serveIndexFromEmbed)
-			if subNext, err := fs.Sub(embeddedWebFS, "_next"); err == nil {
-				engine.StaticFS("/_next", http.FS(subNext))
+
+			// For HTML routes (/manage, /manage/settings, etc.), always serve index.html
+			// Let the Next.js SPA handle client-side routing
+			data, err := fs.ReadFile(embeddedWebFS, "index.html")
+			if err != nil {
+				http.NotFound(w, r)
+				return
 			}
-			engine.NoRoute(serveNextJSStaticFS(embeddedWebFS))
-			tool.DefaultLogger.Infof("[Server] Serving download page from embedded web UI")
-		} else {
-			// Fallback: serve from disk (e.g. -useWebOutPath or dev)
-			webRoot := filepath.Join(tool.GetRunPositionDir(), WebOutPath)
-			indexPage := filepath.Join(webRoot, "index.html")
-			if _, err := os.Stat(indexPage); err == nil {
-				engine.StaticFile("/", indexPage)
-				nextStatic := filepath.Join(webRoot, "_next")
-				if _, err := os.Stat(nextStatic); err == nil {
-					engine.Static("/_next", nextStatic)
-				}
-				engine.NoRoute(serveNextJSStatic(webRoot, indexPage))
-				tool.DefaultLogger.Infof("[Server] Serving download page from %s", WebOutPath)
-			} else {
-				tool.DefaultLogger.Warnf("[Server] Download page not found at %s - run 'cd web && pnpm build' first", indexPage)
-			}
-		}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(data)
+		}))
+		tool.DefaultLogger.Infof("[Server] Serving download page from embedded files")
 	}
 
 	return engine
