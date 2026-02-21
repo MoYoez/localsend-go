@@ -14,7 +14,22 @@ var (
 	ConfigPath           = "config.yaml" // be aware that it can be changed, default to ./config.yaml
 	CurrentConfig        types.AppConfig
 	ProgramCurrentConfig types.ProgramConfig
+	// flagOverrides holds CLI flag overrides for the config API (set by main after SetFlags).
+	flagOverrides *types.Config
 )
+
+// SetFlagOverrides stores the current CLI flag config for the config API to merge.
+func SetFlagOverrides(c *types.Config) {
+	flagOverrides = c
+}
+
+// GetFlagOverrides returns a copy of flag overrides, or nil if not set.
+func GetFlagOverrides() types.Config {
+	if flagOverrides == nil {
+		return types.Config{}
+	}
+	return *flagOverrides
+}
 
 func init() {
 	ProgramCurrentConfig = DefaultProgramConfig()
@@ -139,4 +154,16 @@ func writeDefaultConfig(path string, cfg types.AppConfig) error {
 
 func GetCurrentConfig() *types.AppConfig {
 	return &CurrentConfig
+}
+
+// UpdateCurrentConfigAndPersist updates in-memory config and program config and writes to the config file.
+// Used by the config PATCH API.
+func UpdateCurrentConfigAndPersist(cfg *types.AppConfig, prog types.ProgramConfig) {
+	if cfg != nil {
+		CurrentConfig = *cfg
+	}
+	ProgramCurrentConfig = prog
+	if err := writeDefaultConfig(ConfigPath, CurrentConfig); err != nil {
+		DefaultLogger.Warnf("Failed to persist config: %v", err)
+	}
 }

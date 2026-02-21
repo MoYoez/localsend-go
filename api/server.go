@@ -11,12 +11,28 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/gin-gonic/gin"
+	"github.com/moyoez/localsend-go/api/configapi"
 	"github.com/moyoez/localsend-go/api/controllers"
 	"github.com/moyoez/localsend-go/api/middlewares"
 	"github.com/moyoez/localsend-go/api/models"
+	"github.com/moyoez/localsend-go/api/notifyhub"
+	"github.com/moyoez/localsend-go/api/notifyopts"
 	"github.com/moyoez/localsend-go/tool"
 	"github.com/moyoez/localsend-go/types"
 )
+
+// notifyHub is set by main when -notifyUsingWebsocket is true.
+var notifyHub *notifyhub.Hub
+
+// SetNotifyHub sets the hub for WebSocket notification broadcast (used when NotifyUsingWebsocket is true).
+func SetNotifyHub(h *notifyhub.Hub) {
+	notifyHub = h
+}
+
+// SetNotifyWSEnabled sets whether the notify WebSocket endpoint is enabled (stored in notifyopts to avoid import cycle).
+func SetNotifyWSEnabled(enabled bool) {
+	notifyopts.SetNotifyWSEnabled(enabled)
+}
 
 // Server represents the HTTP API server for receiving TCP API requests
 type Server struct {
@@ -29,14 +45,13 @@ type Server struct {
 }
 
 var (
-	DefaultConfigPath   = "config.yaml"
-	DefaultUploadFolder = "uploads"
-	WebOutPath          = "web/out"
+	DefaultConfigPath = "config.yaml"
+	WebOutPath        = "web/out"
 )
 
 // SetDoNotMakeSessionFolder sets whether to skip session subfolder and use numbered filenames when same name exists.
 func SetDoNotMakeSessionFolder(v bool) {
-	models.DoNotMakeSessionFolder = v
+	models.SetDoNotMakeSessionFolder(v)
 }
 
 // SetDefaultWebOutPath sets the default web out path for both api and models packages
@@ -51,12 +66,9 @@ func SetSelfDevice(device *types.VersionMessage) {
 	models.SetSelfDevice(device)
 }
 
-// SetDefaultUploadFolder sets the default upload folder for both api and models packages
+// SetDefaultUploadFolder sets the default upload folder (used by main for flag override).
 func SetDefaultUploadFolder(folder string) {
-	if folder != "" {
-		DefaultUploadFolder = folder
-		models.DefaultUploadFolder = folder
-	}
+	models.SetDefaultUploadFolder(folder)
 }
 
 // NewServerWithConfig creates a new API server instance with custom config path
@@ -131,14 +143,21 @@ func (s *Server) setupRoutes() *gin.Engine {
 		self.DELETE("/close-share-session", controllers.UserCloseShareSession)    // Close share session
 		self.GET("/create-qr-code", controllers.GenerateQRCode)                   // QR code PNG (same params as api.qrserver.com)
 		self.GET("/get-user-screenshot", controllers.GetUserScreenShot)           // made screenshot in frontend.
+		self.GET("/status", configapi.HandleUserStatus)       // Running and notify_ws_enabled for web UI
+		if notifyopts.NotifyWSEnabled() && notifyHub != nil {
+			self.GET("/notify-ws", HandleNotifyWS(notifyHub))
+		}
+		self.GET("/config", configapi.HandleUserConfigGet)
+		self.PATCH("/config", configapi.HandleUserConfigPatch)
 	}
 
-	// Serve Next.js static export for download page at root (when Download enabled and web/out exists)
+	// Serve Next.js static export (when Download enabled and web/out exists)
 	if selfDevice := models.GetSelfDevice(); selfDevice != nil && selfDevice.Download {
-		indexPage := filepath.Join(tool.GetRunPositionDir(), WebOutPath, "index.html")
+		webRoot := filepath.Join(tool.GetRunPositionDir(), WebOutPath)
+		indexPage := filepath.Join(webRoot, "index.html")
 		if _, err := os.Stat(indexPage); err == nil {
 			engine.StaticFile("/", indexPage)
-			nextStatic := filepath.Join(tool.GetRunPositionDir(), WebOutPath, "_next")
+			nextStatic := filepath.Join(webRoot, "_next")
 			if _, err := os.Stat(nextStatic); err == nil {
 				engine.Static("/_next", nextStatic)
 			}

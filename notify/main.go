@@ -27,6 +27,11 @@ const MaxNotifyFilesUploadEnd = 10
 const MaxNotifyPathLen = 256
 const MaxNotifyFileNameLen = 128
 
+// NotifyHub is the interface for broadcasting notifications to WebSocket clients (e.g. web UI).
+type NotifyHub interface {
+	Broadcast(notification *types.Notification)
+}
+
 // Configuration for Unix Domain Socket notification
 var (
 	// DefaultUnixSocketPath is the default Unix socket path for IPC
@@ -34,7 +39,12 @@ var (
 	// UnixSocketTimeout is the timeout for Unix socket operations
 	UnixSocketTimeout = 3 * time.Second // set unix socket quickly, actually they dont need to change
 	UseNotify         = true
-	PlainTextTypes    = []string{
+	// NoDeckyMode when true disables Unix socket notification (only WebSocket when NotifyUsingWebsocket).
+	NoDeckyMode = false
+	// NotifyUsingWebsocket when true broadcasts each notification to the registered hub (web UI).
+	NotifyUsingWebsocket = false
+	hub         NotifyHub = nil
+	PlainTextTypes = []string{
 		"text/plain",
 		"text/txt",
 		"application/txt",
@@ -51,7 +61,22 @@ func SetUseNotify(use bool) {
 	UseNotify = use
 }
 
-// SendNotification sends notification via Unix Domain Socket
+// SetNoDeckyMode sets whether to skip Unix socket notification (no Decky).
+func SetNoDeckyMode(v bool) {
+	NoDeckyMode = v
+}
+
+// SetNotifyUsingWebsocket sets whether to broadcast notifications to WebSocket hub.
+func SetNotifyUsingWebsocket(v bool) {
+	NotifyUsingWebsocket = v
+}
+
+// SetNotifyHub registers the hub for WebSocket broadcast (used when NotifyUsingWebsocket is true).
+func SetNotifyHub(h NotifyHub) {
+	hub = h
+}
+
+// SendNotification sends notification via Unix Domain Socket and/or WebSocket hub.
 func SendNotification(notification *types.Notification, socketPath string) error {
 	if !UseNotify {
 		return nil
@@ -69,12 +94,7 @@ func SendNotification(notification *types.Notification, socketPath string) error
 		}
 	}
 
-	// Check if socket file exists
-	if _, err := os.Stat(socketPath); os.IsNotExist(err) {
-		return fmt.Errorf("unix socket not found: %s (is the Python server running?)", socketPath)
-	}
-
-	// Serialize notification data to JSON
+	// Serialize notification data to JSON (used for both Unix and WebSocket)
 	var payload []byte
 	var err error
 	if notification != nil {
@@ -86,12 +106,27 @@ func SendNotification(notification *types.Notification, socketPath string) error
 		payload = []byte("{}")
 	}
 
-	// Reject payload over 32KB
-	if len(payload) > NotifyWriteChunkSize {
+	// Reject payload over 32KB for Unix path; WebSocket can still receive it
+	if len(payload) > NotifyWriteChunkSize && !NoDeckyMode {
 		return fmt.Errorf("notification payload too large: %d bytes (max %d)", len(payload), NotifyWriteChunkSize)
 	}
 
-	// Connect to Unix socket
+	var unixErr error
+	if !NoDeckyMode {
+		unixErr = sendNotificationUnix(notification, payload, socketPath)
+	}
+	if NotifyUsingWebsocket && hub != nil {
+		hub.Broadcast(notification)
+	}
+	return unixErr
+}
+
+// sendNotificationUnix sends notification via Unix Domain Socket only.
+func sendNotificationUnix(notification *types.Notification, payload []byte, socketPath string) error {
+	if _, err := os.Stat(socketPath); os.IsNotExist(err) {
+		return fmt.Errorf("unix socket not found: %s (is the Python server running?)", socketPath)
+	}
+
 	conn, err := net.DialTimeout("unix", socketPath, UnixSocketTimeout)
 	if err != nil {
 		return fmt.Errorf("failed to connect to Unix socket %s: %v", socketPath, err)
@@ -102,17 +137,13 @@ func SendNotification(notification *types.Notification, socketPath string) error
 		}
 	}()
 
-	// Set write deadline
-	err = conn.SetWriteDeadline(time.Now().Add(UnixSocketTimeout))
-	if err != nil {
+	if err := conn.SetWriteDeadline(time.Now().Add(UnixSocketTimeout)); err != nil {
 		tool.DefaultLogger.Errorf("Failed to set write deadline: %v", err)
 	}
 
-	// Send length prefix (4 bytes, little-endian uint32) then payload in chunks
 	lengthBuf := make([]byte, 4)
 	binary.LittleEndian.PutUint32(lengthBuf, uint32(len(payload)))
-	_, err = conn.Write(lengthBuf)
-	if err != nil {
+	if _, err = conn.Write(lengthBuf); err != nil {
 		return fmt.Errorf("failed to write length to Unix socket: %v", err)
 	}
 	tool.DefaultLogger.Debugf("Sending notification to Unix socket (len=%d): %s", len(payload), tool.BytesToString(payload))
@@ -128,40 +159,33 @@ func SendNotification(notification *types.Notification, socketPath string) error
 		off += nw
 	}
 
-	// Set read deadline
-	err = conn.SetReadDeadline(time.Now().Add(UnixSocketTimeout))
-	if err != nil {
+	if err := conn.SetReadDeadline(time.Now().Add(UnixSocketTimeout)); err != nil {
 		tool.DefaultLogger.Errorf("Failed to set read deadline: %v", err)
 	}
 
-	// Read response
 	buf := make([]byte, 4096)
 	n, err := conn.Read(buf)
 	if err != nil && err != io.EOF {
 		return fmt.Errorf("failed to read response from Unix socket: %v", err)
 	}
 
-	// Parse response
 	var response map[string]any
 	if n > 0 {
 		if err := sonic.Unmarshal(buf[:n], &response); err != nil {
 			tool.DefaultLogger.Debugf("Unix socket response (raw): %s", string(buf[:n]))
 		} else {
 			tool.DefaultLogger.Debugf("Unix socket response: %v", response)
-			// Check for error in response
 			if errMsg, ok := response["error"].(string); ok && errMsg != "" {
 				return fmt.Errorf("server returned error: %s", errMsg)
 			}
 		}
 	}
 
-	// Log success
 	if notification != nil {
 		tool.DefaultLogger.Infof("[UnixSocket] Notification sent: %s - %s", notification.Type, notification.Title)
 	} else {
 		tool.DefaultLogger.Infof("[UnixSocket] Notification sent")
 	}
-
 	return nil
 }
 

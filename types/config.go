@@ -37,6 +37,8 @@ type Config struct {
 	UseAutoSaveFromFavorites bool // if true and useAutoSave is false, auto-accept from favorite devices only.
 	UseAlias               string
 	SkipNotify             bool   // if true, skip notify mode.
+	NotifyUsingWebsocket   bool   // if true, broadcast notifications over WebSocket for web UI
+	NoDeckyMode            bool   // if true, do not use Unix socket for notify (only WebSocket when notifyUsingWebsocket)
 	UseHttp                bool   // if true, use http protocol; if false, use https protocol. Alias for protocol config.
 	ScanTimeout            int    // scan timeout in seconds, default 500. After timeout, auto scan will stop.
 	UseDownload            bool   // if true, enable download API (prepare-download, download, download page)

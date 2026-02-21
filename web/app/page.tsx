@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { FileDetailModal } from "./components/FileDetailModal";
@@ -219,6 +220,11 @@ function DownloadContent() {
               {t("session.continue")}
             </button>
           </form>
+          <p className="mt-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
+            <Link href="/manage" className="underline hover:text-zinc-700 dark:hover:text-zinc-300">
+              {t("nav.manage")}
+            </Link>
+          </p>
         </div>
       </main>
     );

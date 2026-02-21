@@ -20,6 +20,8 @@ func SetFlags() types.Config {
 	flag.BoolVar(&cfg.UseAutoSaveFromFavorites, "useAutoSaveFromFavorites", false, "if true and useAutoSave is false, auto-accept from favorite devices only")
 	flag.StringVar(&cfg.UseAlias, "useAlias", "", "specify alias for the device")
 	flag.BoolVar(&cfg.SkipNotify, "skipNotify", false, "if true, skip notify mode.")
+	flag.BoolVar(&cfg.NotifyUsingWebsocket, "notifyUsingWebsocket", false, "if true, broadcast notifications over WebSocket for web UI.")
+	flag.BoolVar(&cfg.NoDeckyMode, "noDeckyMode", false, "if true, do not use Unix socket for notify (only WebSocket when notifyUsingWebsocket).")
 	flag.BoolVar(&cfg.UseHttp, "useHttp", false, "if true, use http; if false, use https. Alias for protocol config.")
 	flag.IntVar(&cfg.ScanTimeout, "scanTimeout", 500, "scan timeout in seconds, default 500. After timeout, auto scan will stop. Set to 0 to disable timeout.")
 	flag.BoolVar(&cfg.UseDownload, "useDownload", false, "if true, enable download API (prepare-download, download, download page)")

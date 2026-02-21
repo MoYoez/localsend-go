@@ -29,6 +29,18 @@ var (
 	resolvedReceiveFolders = ttlworker.NewCache[string, map[string]string](tool.DefaultTTL)
 )
 
+// SetDefaultUploadFolder sets the default folder for received uploads.
+func SetDefaultUploadFolder(folder string) {
+	if folder != "" {
+		DefaultUploadFolder = folder
+	}
+}
+
+// SetDoNotMakeSessionFolder sets whether to skip session subfolder and use numbered filenames when same name exists.
+func SetDoNotMakeSessionFolder(v bool) {
+	DoNotMakeSessionFolder = v
+}
+
 func CacheUploadSession(sessionId string, files map[string]types.FileInfo) {
 	uploadSessionMu.Lock()
 	defer uploadSessionMu.Unlock()
