@@ -70,18 +70,7 @@ func UserConfigGet(c *gin.Context) {
 // UserConfigPatch accepts partial config and updates in-memory config and persists to file.
 // PATCH /api/self/v1/config
 func UserConfigPatch(c *gin.Context) {
-	var body struct {
-		Alias                  *string `json:"alias"`
-		DownloadFolder         *string `json:"download_folder"`
-		Pin                    *string `json:"pin"`
-		AutoSave               *bool   `json:"auto_save"`
-		AutoSaveFromFavorites  *bool   `json:"auto_save_from_favorites"`
-		UseHttps               *bool   `json:"use_https"`
-		NetworkInterface       *string `json:"network_interface"`
-		ScanTimeout            *int    `json:"scan_timeout"`
-		UseDownload            *bool   `json:"use_download"`
-		DoNotMakeSessionFolder *bool   `json:"do_not_make_session_folder"`
-	}
+	var body types.ConfigPatchRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

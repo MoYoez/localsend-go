@@ -15,7 +15,6 @@ import (
 	"github.com/moyoez/localsend-go/api/controllers"
 	"github.com/moyoez/localsend-go/api/middlewares"
 	"github.com/moyoez/localsend-go/api/models"
-	"github.com/moyoez/localsend-go/api/notifyhub"
 	"github.com/moyoez/localsend-go/notify"
 	"github.com/moyoez/localsend-go/tool"
 	"github.com/moyoez/localsend-go/types"
@@ -169,7 +168,7 @@ func (s *Server) setupRoutes() *gin.Engine {
 		self.GET("/get-user-screenshot", controllers.GetUserScreenShot)           // made screenshot in frontend.
 		self.GET("/status", controllers.UserStatus)       // Running and notify_ws_enabled for web UI
 		if hub := models.GetNotifyHub(); notify.NotifyWSEnabled() && hub != nil {
-			self.GET("/notify-ws", notifyhub.HandleNotifyWS(hub))
+			self.GET("/notify-ws", controllers.HandleNotifyWS(hub))
 		}
 		self.GET("/config", controllers.UserConfigGet)
 		self.PATCH("/config", controllers.UserConfigPatch)

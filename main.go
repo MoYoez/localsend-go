@@ -4,7 +4,6 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/moyoez/localsend-go/api"
 	"github.com/moyoez/localsend-go/api/models"
-	"github.com/moyoez/localsend-go/api/notifyhub"
 	"github.com/moyoez/localsend-go/boardcast"
 	"github.com/moyoez/localsend-go/notify"
 	"github.com/moyoez/localsend-go/tool"
@@ -58,7 +57,7 @@ func main() {
 	tool.SetFlagOverrides(&FlagConfig)
 
 	if FlagConfig.NotifyUsingWebsocket {
-		hub := notifyhub.New()
+		hub := models.NewHub()
 		notify.SetNotifyHub(hub)
 		models.SetNotifyHub(hub)
 	}
