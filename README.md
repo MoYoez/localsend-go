@@ -12,6 +12,8 @@
 
 This is a server-client implementation of the [LocalSend Protocol](https://github.com/localsend/protocol) written in Go.
 
+> If you see this branch, means this have -notifyUsingWebsocket (Which is used for non-Decky Mode here, not finished all, you need to set up with flags when you are using this.)
+
 This implementation provides a Go-based server and client that follows the LocalSend Protocol v2.1 specification.
 
 Actually it used for [decky-localsend](https://github.com/moyoez/decky-localsend)

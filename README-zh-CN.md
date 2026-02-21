@@ -12,6 +12,8 @@
 
 实际上这是为 [decky-localsend](https://github.com/moyoez/decky-localsend) 编写的工具
 
+> 如果你看到此分支，说明已经包含了 -notifyUsingWebsocket（用于非 Decky 模式，此功能尚未完全完成。使用时需要通过参数手动配置）。
+
 ## 项目结构
 
 ```
