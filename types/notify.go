@@ -27,3 +27,13 @@ type Notification struct {
 	Data       map[string]any `json:"data,omitempty"`       // Additional data fields (shape depends on Type)
 	IsTextOnly bool           `json:"isTextOnly,omitempty"`  // Indicates if this is plain text content (upload notifications)
 }
+
+// NotifyHub is the interface for broadcasting notifications to WebSocket clients (e.g. web UI).
+type NotifyHub interface {
+	Broadcast(notification *Notification)
+}
+
+// NotifyOpt holds notify-related options (e.g. WebSocket hub for broadcast).
+type NotifyOpt struct {
+	Hub NotifyHub
+}

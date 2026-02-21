@@ -36,7 +36,7 @@ func (h *Hub) Unregister(conn *websocket.Conn) {
 }
 
 // Broadcast sends the notification as JSON to all registered connections.
-// Implements notify.NotifyHub.
+// Implements types.NotifyHub.
 func (h *Hub) Broadcast(notification *types.Notification) {
 	if notification == nil {
 		return

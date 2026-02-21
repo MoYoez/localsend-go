@@ -1,11 +1,10 @@
-package api
+package notifyhub
 
 import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"github.com/moyoez/localsend-go/api/notifyhub"
 )
 
 var upgrader = websocket.Upgrader{
@@ -15,8 +14,8 @@ var upgrader = websocket.Upgrader{
 }
 
 // HandleNotifyWS upgrades the request to WebSocket and registers the connection with the hub.
-// Call this only when notifyHub is set and notifyWSEnabled is true.
-func HandleNotifyWS(hub *notifyhub.Hub) gin.HandlerFunc {
+// Call only when the hub is set and notify WS is enabled.
+func HandleNotifyWS(hub *Hub) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {

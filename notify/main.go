@@ -27,11 +27,6 @@ const MaxNotifyFilesUploadEnd = 10
 const MaxNotifyPathLen = 256
 const MaxNotifyFileNameLen = 128
 
-// NotifyHub is the interface for broadcasting notifications to WebSocket clients (e.g. web UI).
-type NotifyHub interface {
-	Broadcast(notification *types.Notification)
-}
-
 // Configuration for Unix Domain Socket notification
 var (
 	// DefaultUnixSocketPath is the default Unix socket path for IPC
@@ -43,7 +38,7 @@ var (
 	NoDeckyMode = false
 	// NotifyUsingWebsocket when true broadcasts each notification to the registered hub (web UI).
 	NotifyUsingWebsocket = false
-	hub         NotifyHub = nil
+	hub         types.NotifyHub = nil
 	PlainTextTypes = []string{
 		"text/plain",
 		"text/txt",
@@ -71,8 +66,13 @@ func SetNotifyUsingWebsocket(v bool) {
 	NotifyUsingWebsocket = v
 }
 
+// NotifyWSEnabled returns whether the notify WebSocket endpoint is enabled (single source for api/status and route registration).
+func NotifyWSEnabled() bool {
+	return NotifyUsingWebsocket
+}
+
 // SetNotifyHub registers the hub for WebSocket broadcast (used when NotifyUsingWebsocket is true).
-func SetNotifyHub(h NotifyHub) {
+func SetNotifyHub(h types.NotifyHub) {
 	hub = h
 }
 

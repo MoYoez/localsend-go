@@ -5,35 +5,19 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/moyoez/localsend-go/api/models"
-	"github.com/moyoez/localsend-go/api/notifyopts"
+	"github.com/moyoez/localsend-go/notify"
 	"github.com/moyoez/localsend-go/tool"
+	"github.com/moyoez/localsend-go/types"
 )
 
 // UserStatus returns server status for the web UI (running, notify_ws_enabled).
 // GET /api/self/v1/status
 func UserStatus(c *gin.Context) {
-	// notify_ws_enabled is set by api package; we need to expose it.
-	// Use a small helper in api package that returns it, or pass via context.
-	// For simplicity we use a getter in api package.
+	// notify_ws_enabled: single source from notify package
 	c.JSON(http.StatusOK, gin.H{
 		"running":           true,
-		"notify_ws_enabled": notifyopts.NotifyWSEnabled(),
+		"notify_ws_enabled": notify.NotifyWSEnabled(),
 	})
-}
-
-// ConfigResponse is the JSON shape for GET/PATCH /api/self/v1/config (Decky parity).
-type ConfigResponse struct {
-	Alias                  string `json:"alias"`
-	DownloadFolder         string `json:"download_folder"`
-	Pin                    string `json:"pin"`
-	AutoSave               bool   `json:"auto_save"`
-	AutoSaveFromFavorites  bool   `json:"auto_save_from_favorites"`
-	SkipNotify             bool   `json:"skip_notify"`
-	UseHttps               bool   `json:"use_https"`
-	NetworkInterface       string `json:"network_interface"`
-	ScanTimeout            int    `json:"scan_timeout"`
-	UseDownload            bool   `json:"use_download"`
-	DoNotMakeSessionFolder bool   `json:"do_not_make_session_folder"`
 }
 
 // UserConfigGet returns current effective config (config file + flag overrides).
@@ -63,7 +47,7 @@ func UserConfigGet(c *gin.Context) {
 		pin = flags.UsePin
 	}
 
-	resp := ConfigResponse{
+	resp := types.ConfigResponse{
 		Alias:                  alias,
 		DownloadFolder:         downloadFolder,
 		Pin:                    pin,

@@ -88,7 +88,7 @@ func ScanNow() error {
 
 	if config.SelfHTTP != nil {
 		tool.DefaultLogger.Debug("scan-now: executing HTTP scan with default background scan options...")
-		scanNowOpts := &HTTPScanOptions{Concurrency: autoScanConcurrencyLimit, RateLimitPPS: autoScanICMPRatePPS}
+		scanNowOpts := &types.HTTPScanOptions{Concurrency: autoScanConcurrencyLimit, RateLimitPPS: autoScanICMPRatePPS}
 
 		// 1. First scan (wait for full completion)
 		if err := ScanOnceHTTP(config.SelfHTTP, scanNowOpts); err != nil {
@@ -155,7 +155,7 @@ func ScanNow() error {
 // scanNowBackgroundLoop runs in a background goroutine after scan-now returns empty.
 // It retries HTTP scanning every 30s, up to HTTPTimeout (default 60s).
 // Exits early if devices are found. On exit, restarts normal auto scan.
-func scanNowBackgroundLoop(config *types.ScanConfig, opts *HTTPScanOptions) {
+func scanNowBackgroundLoop(config *types.ScanConfig, opts *types.HTTPScanOptions) {
 	httpTimeout := config.HTTPTimeout
 	if httpTimeout <= 0 {
 		httpTimeout = 60

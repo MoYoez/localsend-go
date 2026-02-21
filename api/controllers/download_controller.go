@@ -45,49 +45,6 @@ func HandlePrepareDownload(c *gin.Context) {
 	// session to smaller case
 	sessionId = strings.ToLower(sessionId)
 
-	if sessionId == "1145141919810" {
-		// test playground for debuging num.
-		c.JSON(http.StatusOK, &types.PrepareUploadReverseProxyResp{
-			Info: types.DeviceInfoReverseMode{
-				Alias:       "Koi-NotAPowerDeck",
-				Version:     "2.0.0",
-				DeviceModel: "HomeBrewMachineNotMachine",
-				DeviceType:  "headless",
-			},
-			SessionId: sessionId,
-			Files: map[string]types.FileInfo{
-				"ohhh my god": {
-					ID:       "hellbomb ar(strike)med, clean the area.",
-					FileName: "do you like whtas' your see",
-					Size:     100,
-					FileType: "text/plain",
-					SHA256:   "good guy",
-				},
-				"thats": {
-					ID:       "sound not good to me.",
-					FileName: "wow! lt(strike)t store /com",
-					Size:     100,
-					FileType: "text/plain",
-					SHA256:   "linu(strike) drop tech!",
-				},
-				"too anime": {
-					ID:       "Cial(strike)o~",
-					FileName: "0721",
-					Size:     0721,
-					FileType: "text/plain",
-					SHA256:   "081010101",
-				},
-				"for me": {
-					ID:       "huh? ⬆️➡️⬇️⬇️⬇️",
-					FileName: "⬆️➡️⬇️⬇️⬇️ For super earth!!!",
-					Size:     500,
-					FileType: "text/plain",
-					SHA256:   "Helldi(strike)ers ready to go!",
-				},
-			},
-		})
-		return
-	}
 	pin := c.Query("pin")
 
 	if sessionId == "" {

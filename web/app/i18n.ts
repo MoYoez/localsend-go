@@ -1,5 +1,6 @@
-export type Locale = "zh" | "en";
+import type { Locale } from "./types";
 
+export type { Locale };
 export const messages: Record<Locale, Record<string, string>> = {
   zh: {
     "nav.download": "下载",

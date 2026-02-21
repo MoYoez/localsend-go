@@ -17,14 +17,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// HTTPScanOptions configures concurrency and ICMP rate limit for HTTP scan.
-// Concurrency: max concurrent scan goroutines; 0 or large value = effectively unlimited (e.g. scan-now).
-// RateLimitPPS: ICMP probe rate limit (packets per second); 0 = no limit.
-type HTTPScanOptions struct {
-	Concurrency  int // max concurrent workers
-	RateLimitPPS int // 0 = no rate limit
-}
-
 // scanOneIPHTTP performs ICMP probe (host reachability), then POST register (https then http on EOF), parses response and stores device via share.SetUserScanCurrent.
 // Used by ListenMulticastUsingHTTPWithTimeout and ScanOnceHTTP. Returns true if a device was discovered and stored.
 func scanOneIPHTTP(targetIP string, payloadBytes []byte, httpClient *http.Client) bool {
@@ -176,7 +168,7 @@ func ListenMulticastUsingHTTPWithTimeout(self *types.VersionMessageHTTP, timeout
 	startTime := time.Now()
 
 	scanOnce := func() {
-		opts := &HTTPScanOptions{Concurrency: autoScanConcurrencyLimit, RateLimitPPS: autoScanICMPRatePPS}
+		opts := &types.HTTPScanOptions{Concurrency: autoScanConcurrencyLimit, RateLimitPPS: autoScanICMPRatePPS}
 		if err := ScanOnceHTTP(self, opts); err != nil {
 			tool.DefaultLogger.Warnf("ListenMulticastUsingHTTP: scan failed: %v", err)
 		}
@@ -214,12 +206,12 @@ func ListenMulticastUsingHTTPWithTimeout(self *types.VersionMessageHTTP, timeout
 
 // ScanOnceHTTP performs a single HTTP scan for devices.
 // opts: nil or RateLimitPPS=0 and Concurrency=0 means unlimited (scan-now style).
-func ScanOnceHTTP(self *types.VersionMessageHTTP, opts *HTTPScanOptions) error {
+func ScanOnceHTTP(self *types.VersionMessageHTTP, opts *types.HTTPScanOptions) error {
 	if self == nil {
 		return fmt.Errorf("self message is nil")
 	}
 	if opts == nil {
-		opts = &HTTPScanOptions{Concurrency: scanNowHTTPConcurrency, RateLimitPPS: 0}
+		opts = &types.HTTPScanOptions{Concurrency: scanNowHTTPConcurrency, RateLimitPPS: 0}
 	}
 	concurrency := opts.Concurrency
 	if concurrency <= 0 {

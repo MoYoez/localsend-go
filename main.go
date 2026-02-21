@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/charmbracelet/log"
 	"github.com/moyoez/localsend-go/api"
+	"github.com/moyoez/localsend-go/api/models"
 	"github.com/moyoez/localsend-go/api/notifyhub"
 	"github.com/moyoez/localsend-go/boardcast"
 	"github.com/moyoez/localsend-go/notify"
@@ -56,12 +57,10 @@ func main() {
 	notify.SetNotifyUsingWebsocket(FlagConfig.NotifyUsingWebsocket)
 	tool.SetFlagOverrides(&FlagConfig)
 
-	var hub *notifyhub.Hub
 	if FlagConfig.NotifyUsingWebsocket {
-		hub = notifyhub.New()
+		hub := notifyhub.New()
 		notify.SetNotifyHub(hub)
-		api.SetNotifyHub(hub)
-		api.SetNotifyWSEnabled(true)
+		models.SetNotifyHub(hub)
 	}
 
 	// armed, clear this area. // port should focus on 53317

@@ -7,32 +7,19 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/charmbracelet/log"
 	"github.com/gin-gonic/gin"
-	"github.com/moyoez/localsend-go/api/configapi"
 	"github.com/moyoez/localsend-go/api/controllers"
 	"github.com/moyoez/localsend-go/api/middlewares"
 	"github.com/moyoez/localsend-go/api/models"
 	"github.com/moyoez/localsend-go/api/notifyhub"
-	"github.com/moyoez/localsend-go/api/notifyopts"
+	"github.com/moyoez/localsend-go/notify"
 	"github.com/moyoez/localsend-go/tool"
 	"github.com/moyoez/localsend-go/types"
 )
-
-// notifyHub is set by main when -notifyUsingWebsocket is true.
-var notifyHub *notifyhub.Hub
-
-// SetNotifyHub sets the hub for WebSocket notification broadcast (used when NotifyUsingWebsocket is true).
-func SetNotifyHub(h *notifyhub.Hub) {
-	notifyHub = h
-}
-
-// SetNotifyWSEnabled sets whether the notify WebSocket endpoint is enabled (stored in notifyopts to avoid import cycle).
-func SetNotifyWSEnabled(enabled bool) {
-	notifyopts.SetNotifyWSEnabled(enabled)
-}
 
 // Server represents the HTTP API server for receiving TCP API requests
 type Server struct {
@@ -64,6 +51,43 @@ func SetDefaultWebOutPath(path string) {
 // SetSelfDevice sets the local device info used for user-side scanning.
 func SetSelfDevice(device *types.VersionMessage) {
 	models.SetSelfDevice(device)
+}
+
+// serveNextJSStatic returns a Gin NoRoute handler that serves Next.js static export sub-routes.
+// Next.js with trailingSlash: false outputs e.g. manage.html for /manage; with trailingSlash: true, manage/index.html.
+// Tries path.html, then path/index.html; otherwise serves indexPage (SPA fallback).
+func serveNextJSStatic(webRoot, indexPage string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
+			c.Status(http.StatusMethodNotAllowed)
+			return
+		}
+		path := strings.TrimPrefix(c.Request.URL.Path, "/")
+		path = strings.TrimSuffix(path, "/")
+		if path == "" {
+			c.File(indexPage)
+			return
+		}
+		// Prevent path traversal
+		if strings.Contains(path, "..") {
+			c.File(indexPage)
+			return
+		}
+		// Try path.html (Next.js trailingSlash: false)
+		htmlFile := filepath.Join(webRoot, path+".html")
+		if _, err := os.Stat(htmlFile); err == nil {
+			c.File(htmlFile)
+			return
+		}
+		// Try path/index.html (directory-style export)
+		indexInDir := filepath.Join(webRoot, path, "index.html")
+		if _, err := os.Stat(indexInDir); err == nil {
+			c.File(indexInDir)
+			return
+		}
+		// SPA fallback: serve root index so client-side router can handle it
+		c.File(indexPage)
+	}
 }
 
 // SetDefaultUploadFolder sets the default upload folder (used by main for flag override).
@@ -143,12 +167,12 @@ func (s *Server) setupRoutes() *gin.Engine {
 		self.DELETE("/close-share-session", controllers.UserCloseShareSession)    // Close share session
 		self.GET("/create-qr-code", controllers.GenerateQRCode)                   // QR code PNG (same params as api.qrserver.com)
 		self.GET("/get-user-screenshot", controllers.GetUserScreenShot)           // made screenshot in frontend.
-		self.GET("/status", configapi.HandleUserStatus)       // Running and notify_ws_enabled for web UI
-		if notifyopts.NotifyWSEnabled() && notifyHub != nil {
-			self.GET("/notify-ws", HandleNotifyWS(notifyHub))
+		self.GET("/status", controllers.UserStatus)       // Running and notify_ws_enabled for web UI
+		if hub := models.GetNotifyHub(); notify.NotifyWSEnabled() && hub != nil {
+			self.GET("/notify-ws", notifyhub.HandleNotifyWS(hub))
 		}
-		self.GET("/config", configapi.HandleUserConfigGet)
-		self.PATCH("/config", configapi.HandleUserConfigPatch)
+		self.GET("/config", controllers.UserConfigGet)
+		self.PATCH("/config", controllers.UserConfigPatch)
 	}
 
 	// Serve Next.js static export (when Download enabled and web/out exists)
@@ -161,6 +185,8 @@ func (s *Server) setupRoutes() *gin.Engine {
 			if _, err := os.Stat(nextStatic); err == nil {
 				engine.Static("/_next", nextStatic)
 			}
+			// Serve sub-routes (e.g. /manage, /manage/about): try path.html then path/index.html, else fallback to index.html for SPA
+			engine.NoRoute(serveNextJSStatic(webRoot, indexPage))
 			tool.DefaultLogger.Infof("[Server] Serving download page from %s", WebOutPath)
 		} else {
 			tool.DefaultLogger.Warnf("[Server] Download page not found at %s - run 'cd web && npm run build' first", indexPage)
