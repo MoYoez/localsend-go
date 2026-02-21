@@ -40,6 +40,7 @@ export default function ManagePage() {
   const [addFavoriteOpen, setAddFavoriteOpen] = useState(false);
   const [addFavoriteAlias, setAddFavoriteAlias] = useState("");
   const addFavoriteDeviceRef = useRef<ScanDevice | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
   const [backendStatus, setBackendStatus] = useState<{ running: boolean; notify_ws_enabled?: boolean }>({ running: false });
   const [networkInfo, setNetworkInfo] = useState<{ interface_name: string; ip_address: string; number?: string }[]>([]);
   const [deviceAlias, setDeviceAlias] = useState("");
@@ -139,6 +140,13 @@ export default function ManagePage() {
     setSelectedItems((prev) => [...prev, ...newItems]);
     e.target.value = "";
   };
+
+  useEffect(() => {
+    const el = folderInputRef.current;
+    if (!el) return;
+    el.setAttribute("webkitdirectory", "");
+    el.setAttribute("directory", "");
+  }, []);
 
   const handleFolderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -497,10 +505,10 @@ export default function ManagePage() {
             {t("manage.chooseFiles")}
           </label>
           <input
+            ref={folderInputRef}
             type="file"
             id="manage-folder-input"
             className="hidden"
-            {...({ webkitDirectory: true, directory: true } as React.InputHTMLAttributes<HTMLInputElement>)}
             multiple
             onChange={handleFolderSelect}
           />

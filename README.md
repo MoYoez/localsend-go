@@ -33,29 +33,28 @@ Actually it used for [decky-localsend](https://github.com/moyoez/decky-localsend
 
 ### Command-Line Flags
 
-| Flag                          | Type    | Default | Description                                                                                  |
-|-------------------------------|---------|---------|----------------------------------------------------------------------------------------------|
-| `-log`                        | string  | (empty) | Log mode: `dev` or `prod` or `none`                                                               |
-| `-useMultcastAddress`         | string  | (empty) | Override the default multicast address                                                       |
-| `-useMultcastPort`            | int     | 0       | Override the default multicast port                                                          |
-| `-useConfigPath`              | string  | (empty) | Specify an alternative config file path                                                      |
-| `-useDefaultUploadFolder`     | string  | (empty) | Specify the default folder for uploads                                                       |
-| `-useLegacyMode`              | bool    | false   | Use legacy HTTP mode to scan devices (scans every 30 seconds)                                |
-| `-useReferNetworkInterface`   | string  | "*"     | Specify the network interface for use (e.g., `"en0"`, `"eth0"`, or `"*"` for all interfaces) |
-| `-usePin`                    | string  | (empty) | Specify a PIN to require for uploads |
-| `-useAutoSave`               | bool    | false   | If false, requires manual confirmation to receive files |
-| `-useAlias`                    | string  | (empty) | Specify a Alias to shown in net. |
-| `-useHttps`                   | bool    | true    | If true, use https (encrypted); if false, use http (unencrypted). Alias for protocol config. |
-| `-useMixedScan`               | bool    | false   | Use mixed scan mode (both UDP and HTTP for discovery)                                        |
-| `-skipNotify`                 | bool    | false   | Skip notification mode                                                                       |
-| `-scanTimeout`                | int     | 500       | Timeout for device scan, in seconds                                                           |
-| `-useAutoSaveFromFavorites`   | bool    | false   | If true, automatically saves files from favorite devices without confirmation |
-| `-useDownload`                 | Boolean  | false    | if true，enable Download API（prepare-download、download、page）
-| `-webOutPath`                  | string   | web/out  | Next.js static download out here
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-log` | string | `prod` | Log mode: `dev`, `prod`, or `none` |
+| `-useMultcastAddress` | string | (empty) | Override the default multicast address |
+| `-useMultcastPort` | int | 0 | Override the default multicast port |
+| `-useConfigPath` | string | `config.yaml` | Config file path |
+| `-useDefaultUploadFolder` | string | `uploads` | Default folder for received uploads |
+| `-useReferNetworkInterface` | string | `*` | Network interface (e.g. `en0`, `eth0`) or `*` for all |
+| `-usePin` | string | (empty) | PIN for upload (only for incoming upload request) |
+| `-useAutoSave` | bool | false | If false, user must confirm before receiving files |
+| `-useAutoSaveFromFavorites` | bool | false | If true and useAutoSave is false, auto-accept from favorite devices only |
+| `-useAlias` | string | (empty) | Device alias shown on the network |
+| `-skipNotify` | bool | false | If true, skip notify mode |
+| `-notifyUsingWebsocket` | bool | false | If true, broadcast notifications over WebSocket for web UI |
+| `-noDeckyMode` | bool | false | If true, do not use Unix socket for notify (only WebSocket when notifyUsingWebsocket) |
+| `-useHttp` | bool | false | If true, use HTTP; if false, use HTTPS (alias for protocol) |
+| `-scanTimeout` | int | 500 | Scan timeout in seconds; 0 to disable |
+| `-useDownload` | bool | false | If true, enable download API (prepare-download, download, download page) |
+| `-useWebOutPath` | string | (empty) | Path to Next.js static export for download page |
+| `-doNotMakeSessionFolder` | bool | false | If true, do not create session subfolder; same-name files saved as name-2.ext, name-3.ext, ... |
 
-> Most of cases, mixed mode works well for most cases, if you prefer to reduce the power cost for your machine, switching to (Normal Mode - UDP Detected.) ,it will not make scan to the whole net.
-
-> Sometimes Application cannot scan other localsend if the online too long time, **consider trigger "scan" on other localsend**.
+> Default scan mode is mixed (UDP + HTTP). If the app cannot see other devices after a long time, try triggering "Scan" on the other LocalSend client.
 
 ### TODO
 

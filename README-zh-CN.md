@@ -27,33 +27,32 @@
 └── types/            # 类型定义
 ```
 
-### Flags
+### 命令行参数（Flags）
 
-| 参数                            | 类型    | 默认值   | 说明                                                                                         |
-|---------------------------------|---------|----------|----------------------------------------------------------------------------------------------|
-| `-log`                         | string   | (空)     | 日志模式：`dev` 或 `prod` 或 `none`                                                                    |
-| `-useMultcastAddress`          | string   | (空)     | 覆盖默认组播地址                                                                             |
-| `-useMultcastPort`             | int     | 0        | 覆盖默认组播端口                                                                             |
-| `-useConfigPath`               | string   | (空)     | 指定其他配置文件路径                                                                         |
-| `-useDefaultUploadFolder`      | string   | (空)     | 指定默认上传文件夹                                                                           |
-| `-useLegacyMode`               | Boolean   | false    | 使用旧版 HTTP 模式扫描设备（每 30 秒扫描一次）                                               |
-| `-useReferNetworkInterface`    | string   | "*"      | 指定使用的网络接口（如 `"en0"`、`"eth0"`，或 `"*"` 表示所有接口）                             |
-| `-usePin`                      | string   | (空)     | 指定上传时需要的 PIN
-| `-useDownload`                 | Boolean  | false    | 若为 true，启用 Download API（prepare-download、download、下载页）
-| `-webOutPath`                  | string   | web/out  | Next.js 静态导出的输出路径（用于下载页）
-| `-useAutoSave`                 | Boolean  | false    | 若为 false，则在接收文件时需要手动确认                |
-| `-useAlias`                    | string  | (空) | 指定别名以在互联网上显示 |
-| `-useHttp`                   | bool    | true    | 若为 true，使用 http；若为 false，使用 http（加密）。 |
-| `-useMixedScan`               | bool    | false   | 使用混合模式扫描 (UDP+HTTP)
-| `-skipNotify`                 | bool    | false   | 跳过对 Decky 的 unix 的通信
-| `-scanTimeout`                | int     | 500       | 设备扫描超时时间
-| `-useAutoSaveFromFavorites`   | bool   | false   | 若为 true，则仅自动保存来自收藏设备的文件，无需确认 |
-
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `-log` | string | `prod` | 日志模式：`dev`、`prod` 或 `none` |
+| `-useMultcastAddress` | string | (空) | 覆盖默认组播地址 |
+| `-useMultcastPort` | int | 0 | 覆盖默认组播端口 |
+| `-useConfigPath` | string | `config.yaml` | 配置文件路径 |
+| `-useDefaultUploadFolder` | string | `uploads` | 接收文件默认保存目录 |
+| `-useReferNetworkInterface` | string | `*` | 网络接口（如 `en0`、`eth0`）或 `*` 表示全部 |
+| `-usePin` | string | (空) | 上传时要求的 PIN（仅对接收方生效） |
+| `-useAutoSave` | bool | false | 若为 false，接收文件前需手动确认 |
+| `-useAutoSaveFromFavorites` | bool | false | 若为 true 且 useAutoSave 为 false，仅对收藏设备自动接收 |
+| `-useAlias` | string | (空) | 设备在网络上显示的别名 |
+| `-skipNotify` | bool | false | 若为 true，关闭通知模式 |
+| `-notifyUsingWebsocket` | bool | false | 若为 true，通过 WebSocket 向 Web 管理页推送通知 |
+| `-noDeckyMode` | bool | false | 若为 true，不使用 Unix socket 通知（仅在 notifyUsingWebsocket 时用 WebSocket） |
+| `-useHttp` | bool | false | 若为 true 使用 HTTP，否则使用 HTTPS（对应协议配置） |
+| `-scanTimeout` | int | 500 | 扫描超时秒数；0 表示不超时 |
+| `-useDownload` | bool | false | 若为 true，启用下载 API（prepare-download、download、下载页） |
+| `-useWebOutPath` | string | (空) | Next.js 静态导出路径（用于下载页） |
+| `-doNotMakeSessionFolder` | bool | false | 若为 true，不创建会话子目录；同名文件保存为 name-2.ext、name-3.ext 等 |
 
 #### 小提示
 
-> 大多数情况下，使用 Mixed Mode 就可以了xwx :(
-> 有些时候 Mixed Mode 无法扫描到部分设备，考虑触发一下 Localsend 的 Scan 一般可以工作
+> 默认使用混合扫描（UDP + HTTP）。若长时间后扫不到其他设备，可在对方 LocalSend 上手动点一次「扫描」。
 
 ## TODO
 
