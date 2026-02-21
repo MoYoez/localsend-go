@@ -1,30 +1,35 @@
 package types
 
-// ConfigResponse is the JSON shape for GET/PATCH /api/self/v1/config (Decky parity).
+// ConfigResponse is the JSON shape for GET /api/self/v1/config (full config.yaml).
 type ConfigResponse struct {
-	Alias                  string `json:"alias"`
-	DownloadFolder         string `json:"download_folder"`
-	Pin                    string `json:"pin"`
-	AutoSave               bool   `json:"auto_save"`
-	AutoSaveFromFavorites  bool   `json:"auto_save_from_favorites"`
-	SkipNotify             bool   `json:"skip_notify"`
-	UseHttps               bool   `json:"use_https"`
-	NetworkInterface       string `json:"network_interface"`
-	ScanTimeout            int    `json:"scan_timeout"`
-	UseDownload            bool   `json:"use_download"`
-	DoNotMakeSessionFolder bool   `json:"do_not_make_session_folder"`
+	Alias                 string                `json:"alias"`
+	Version               string                `json:"version"`
+	DeviceModel           string                `json:"device_model"`
+	DeviceType            string                `json:"device_type"`
+	Fingerprint           string                `json:"fingerprint"`
+	Port                  int                   `json:"port"`
+	Protocol              string                `json:"protocol"`
+	Download              bool                  `json:"download"`
+	Announce              bool                  `json:"announce"`
+	CertPEM               string                `json:"cert_pem"`
+	KeyPEM                string                `json:"key_pem"`
+	AutoSaveFromFavorites bool                  `json:"auto_save_from_favorites"`
+	FavoriteDevices       []FavoriteDeviceEntry `json:"favorite_devices"`
 }
 
-// ConfigPatchRequest is the JSON body for PATCH /api/self/v1/config (partial update, all fields optional).
+// ConfigPatchRequest is the JSON body for PATCH /api/self/v1/config (all optional, merge into config.yaml).
 type ConfigPatchRequest struct {
-	Alias                  *string `json:"alias"`
-	DownloadFolder         *string `json:"download_folder"`
-	Pin                    *string `json:"pin"`
-	AutoSave               *bool   `json:"auto_save"`
-	AutoSaveFromFavorites  *bool   `json:"auto_save_from_favorites"`
-	UseHttps               *bool   `json:"use_https"`
-	NetworkInterface       *string `json:"network_interface"`
-	ScanTimeout            *int    `json:"scan_timeout"`
-	UseDownload            *bool   `json:"use_download"`
-	DoNotMakeSessionFolder *bool   `json:"do_not_make_session_folder"`
+	Alias                 *string               `json:"alias"`
+	Version               *string               `json:"version"`
+	DeviceModel           *string               `json:"device_model"`
+	DeviceType            *string               `json:"device_type"`
+	Fingerprint           *string               `json:"fingerprint"`
+	Port                  *int                  `json:"port"`
+	Protocol              *string               `json:"protocol"`
+	Download              *bool                 `json:"download"`
+	Announce              *bool                 `json:"announce"`
+	CertPEM               *string               `json:"cert_pem"`
+	KeyPEM                *string               `json:"key_pem"`
+	AutoSaveFromFavorites *bool                 `json:"auto_save_from_favorites"`
+	FavoriteDevices       *[]FavoriteDeviceEntry `json:"favorite_devices"`
 }

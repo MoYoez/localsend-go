@@ -19,7 +19,7 @@ const nav = [
   { href: "/manage", labelKey: "nav.manage", icon: LuSendToBack },
   { href: "/manage/settings", labelKey: "nav.settings", icon: LuSettings },
   { href: "/manage/about", labelKey: "nav.about", icon: LuInfo },
-  { href: "/manage/share", labelKey: "nav.share", icon: LuShare2 },
+  { href: "/manage#share", labelKey: "nav.share", icon: LuShare2 },
 ];
 
 export default function ManageLayout({

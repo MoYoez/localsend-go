@@ -157,12 +157,23 @@ func GetCurrentConfig() *types.AppConfig {
 }
 
 // UpdateCurrentConfigAndPersist updates in-memory config and program config and writes to the config file.
-// Used by the config PATCH API.
 func UpdateCurrentConfigAndPersist(cfg *types.AppConfig, prog types.ProgramConfig) {
 	if cfg != nil {
 		CurrentConfig = *cfg
 	}
 	ProgramCurrentConfig = prog
+	if err := writeDefaultConfig(ConfigPath, CurrentConfig); err != nil {
+		DefaultLogger.Warnf("Failed to persist config: %v", err)
+	}
+}
+
+// PersistAppConfig updates in-memory AppConfig and writes config.yaml only (settings API: config file only).
+func PersistAppConfig(cfg *types.AppConfig) {
+	if cfg == nil {
+		return
+	}
+	CurrentConfig = *cfg
+	ProgramCurrentConfig.AutoSaveFromFavorites = cfg.AutoSaveFromFavorites
 	if err := writeDefaultConfig(ConfigPath, CurrentConfig); err != nil {
 		DefaultLogger.Warnf("Failed to persist config: %v", err)
 	}

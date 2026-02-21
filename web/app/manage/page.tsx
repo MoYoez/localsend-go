@@ -5,6 +5,7 @@ import { useLanguage } from "../context/LanguageContext";
 import { useNotify } from "../context/NotifyContext";
 import { apiGet, apiPost, apiDelete } from "../utils/api";
 import { LuRefreshCw, LuUpload, LuScan, LuPlus, LuX, LuHeart } from "react-icons/lu";
+import { ShareSection } from "./components/ShareSection";
 import type { ScanDevice } from "../types";
 
 interface FavoriteDevice {
@@ -526,6 +527,9 @@ export default function ManagePage() {
       {error && (
         <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
       )}
+
+      {/* Share link section at bottom of manage page; content shown in modal */}
+      <ShareSection />
 
       {/* PIN prompt */}
       {pinPrompt && (

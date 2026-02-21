@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/moyoez/localsend-go/api/models"
 	"github.com/moyoez/localsend-go/notify"
 	"github.com/moyoez/localsend-go/tool"
 	"github.com/moyoez/localsend-go/types"
@@ -20,54 +19,33 @@ func UserStatus(c *gin.Context) {
 	})
 }
 
-// UserConfigGet returns current effective config (config file + flag overrides).
+// UserConfigGet returns full config from config.yaml.
 // GET /api/self/v1/config
 func UserConfigGet(c *gin.Context) {
 	cfg := tool.GetCurrentConfig()
-	prog := tool.GetProgramConfigStatus()
-	flags := tool.GetFlagOverrides()
-
-	downloadFolder := models.DefaultUploadFolder
-	if flags.UseDefaultUploadFolder != "" {
-		downloadFolder = flags.UseDefaultUploadFolder
+	fav := cfg.FavoriteDevices
+	if fav == nil {
+		fav = []types.FavoriteDeviceEntry{}
 	}
-
-	useHttps := cfg.Protocol != "http"
-	if flags.UseHttp {
-		useHttps = false
-	}
-
-	alias := cfg.Alias
-	if flags.UseAlias != "" {
-		alias = flags.UseAlias
-	}
-
-	pin := prog.Pin
-	if flags.UsePin != "" {
-		pin = flags.UsePin
-	}
-
 	resp := types.ConfigResponse{
-		Alias:                  alias,
-		DownloadFolder:         downloadFolder,
-		Pin:                    pin,
-		AutoSave:               prog.AutoSave,
-		AutoSaveFromFavorites:  prog.AutoSaveFromFavorites,
-		SkipNotify:             flags.SkipNotify,
-		UseHttps:               useHttps,
-		NetworkInterface:       flags.UseReferNetworkInterface,
-		ScanTimeout:            flags.ScanTimeout,
-		UseDownload:            cfg.Download,
-		DoNotMakeSessionFolder: flags.DoNotMakeSessionFolder,
+		Alias:                 cfg.Alias,
+		Version:               cfg.Version,
+		DeviceModel:           cfg.DeviceModel,
+		DeviceType:            cfg.DeviceType,
+		Fingerprint:           cfg.Fingerprint,
+		Port:                  cfg.Port,
+		Protocol:              cfg.Protocol,
+		Download:              cfg.Download,
+		Announce:              cfg.Announce,
+		CertPEM:               cfg.CertPEM,
+		KeyPEM:                cfg.KeyPEM,
+		AutoSaveFromFavorites: cfg.AutoSaveFromFavorites,
+		FavoriteDevices:       fav,
 	}
-	if flags.UseDownload {
-		resp.UseDownload = true
-	}
-
 	c.JSON(http.StatusOK, resp)
 }
 
-// UserConfigPatch accepts partial config and updates in-memory config and persists to file.
+// UserConfigPatch accepts full or partial config and persists to config.yaml.
 // PATCH /api/self/v1/config
 func UserConfigPatch(c *gin.Context) {
 	var body types.ConfigPatchRequest
@@ -76,42 +54,48 @@ func UserConfigPatch(c *gin.Context) {
 		return
 	}
 
-	cfg := tool.GetCurrentConfig()
-	prog := tool.GetProgramConfigStatus()
+	cfg := *tool.GetCurrentConfig()
 
 	if body.Alias != nil {
 		cfg.Alias = *body.Alias
 	}
-	if body.DownloadFolder != nil {
-		models.SetDefaultUploadFolder(*body.DownloadFolder)
+	if body.Version != nil {
+		cfg.Version = *body.Version
 	}
-	if body.Pin != nil {
-		prog.Pin = *body.Pin
+	if body.DeviceModel != nil {
+		cfg.DeviceModel = *body.DeviceModel
 	}
-	if body.AutoSave != nil {
-		prog.AutoSave = *body.AutoSave
+	if body.DeviceType != nil {
+		cfg.DeviceType = *body.DeviceType
+	}
+	if body.Fingerprint != nil {
+		cfg.Fingerprint = *body.Fingerprint
+	}
+	if body.Port != nil {
+		cfg.Port = *body.Port
+	}
+	if body.Protocol != nil {
+		cfg.Protocol = *body.Protocol
+	}
+	if body.Download != nil {
+		cfg.Download = *body.Download
+	}
+	if body.Announce != nil {
+		cfg.Announce = *body.Announce
+	}
+	if body.CertPEM != nil {
+		cfg.CertPEM = *body.CertPEM
+	}
+	if body.KeyPEM != nil {
+		cfg.KeyPEM = *body.KeyPEM
 	}
 	if body.AutoSaveFromFavorites != nil {
-		prog.AutoSaveFromFavorites = *body.AutoSaveFromFavorites
+		cfg.AutoSaveFromFavorites = *body.AutoSaveFromFavorites
 	}
-	tool.SetProgramConfigStatus(prog.Pin, prog.AutoSave, prog.AutoSaveFromFavorites)
-
-	if body.UseHttps != nil {
-		if *body.UseHttps {
-			cfg.Protocol = "https"
-		} else {
-			cfg.Protocol = "http"
-		}
-	}
-	if body.UseDownload != nil {
-		cfg.Download = *body.UseDownload
-	}
-	if body.DoNotMakeSessionFolder != nil {
-		models.SetDoNotMakeSessionFolder(*body.DoNotMakeSessionFolder)
+	if body.FavoriteDevices != nil {
+		cfg.FavoriteDevices = *body.FavoriteDevices
 	}
 
-	// Persist AppConfig to config file; ProgramCurrentConfig is updated in memory
-	tool.UpdateCurrentConfigAndPersist(cfg, prog)
-
+	tool.PersistAppConfig(&cfg)
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
