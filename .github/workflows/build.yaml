@@ -61,8 +61,8 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.event.repository.name }}-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/*.zip
+          name: ${{ github.event.repository.name }}-${{ matrix.goos }}-${{ matrix.goarch }}.zip
+          path: dist/*
 
   build-web:
     runs-on: ubuntu-latest
