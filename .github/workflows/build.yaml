@@ -6,6 +6,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    needs: [build-web]
     strategy:
       matrix:
         goos: [linux, windows, darwin]
@@ -14,6 +15,16 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download web artifact (for embed)
+        uses: actions/download-artifact@v4
+        with:
+          name: web
+
+      # Artifact "web" extracts to folder "web" (contents of web/out); go:embed needs web/out/
+      - name: Setup web/out for embed
+        run: |
+          mv web web_out && mkdir web && mv web_out web/out && ls -la web/out/
 
       - name: Set up Go
         uses: actions/setup-go@v5

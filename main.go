@@ -1,6 +1,9 @@
 package main
 
 import (
+	"embed"
+	"io/fs"
+
 	"github.com/charmbracelet/log"
 	"github.com/moyoez/localsend-go/api"
 	"github.com/moyoez/localsend-go/api/models"
@@ -9,6 +12,10 @@ import (
 	"github.com/moyoez/localsend-go/tool"
 	"github.com/moyoez/localsend-go/types"
 )
+
+// Embedded web UI (Next.js static export). Build web first: cd web && pnpm build
+//go:embed all:web/out
+var embeddedWebFS embed.FS
 
 func main() {
 	// method: always use config first, then flag overwrite config.
@@ -51,6 +58,10 @@ func main() {
 	api.SetDoNotMakeSessionFolder(FlagConfig.DoNotMakeSessionFolder)
 	tool.SetProgramConfigStatus(FlagConfig.UsePin, FlagConfig.UseAutoSave, FlagConfig.UseAutoSaveFromFavorites)
 	api.SetDefaultWebOutPath(FlagConfig.UseWebOutPath)
+	// Use embedded web UI when available (web/out must exist at build time)
+	if webOut, err := fs.Sub(embeddedWebFS, "web/out"); err == nil {
+		api.SetEmbeddedWebFS(webOut)
+	}
 	notify.SetUseNotify(!FlagConfig.SkipNotify)
 	notify.SetNoDeckyMode(FlagConfig.NoDeckyMode)
 	notify.SetNotifyUsingWebsocket(FlagConfig.NotifyUsingWebsocket)

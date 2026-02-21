@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"encoding/pem"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -33,6 +34,8 @@ type Server struct {
 var (
 	DefaultConfigPath = "config.yaml"
 	WebOutPath        = "web/out"
+	// embeddedWebFS is set by main when web/out is embedded at build time
+	embeddedWebFS fs.FS
 )
 
 // SetDoNotMakeSessionFolder sets whether to skip session subfolder and use numbered filenames when same name exists.
@@ -45,6 +48,11 @@ func SetDefaultWebOutPath(path string) {
 	if path != "" {
 		WebOutPath = path
 	}
+}
+
+// SetEmbeddedWebFS sets the embedded FS for web UI (root = content of web/out). Used when building with embed.
+func SetEmbeddedWebFS(f fs.FS) {
+	embeddedWebFS = f
 }
 
 // SetSelfDevice sets the local device info used for user-side scanning.
@@ -86,6 +94,41 @@ func serveNextJSStatic(webRoot, indexPage string) gin.HandlerFunc {
 		}
 		// SPA fallback: serve root index so client-side router can handle it
 		c.File(indexPage)
+	}
+}
+
+// serveNextJSStaticFS returns a Gin NoRoute handler that serves from embedded FS (same route rules as serveNextJSStatic).
+func serveNextJSStaticFS(webFS fs.FS) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
+			c.Status(http.StatusMethodNotAllowed)
+			return
+		}
+		path := strings.TrimPrefix(c.Request.URL.Path, "/")
+		path = strings.TrimSuffix(path, "/")
+		if path == "" {
+			c.FileFromFS("index.html", http.FS(webFS))
+			return
+		}
+		if strings.Contains(path, "..") {
+			c.FileFromFS("index.html", http.FS(webFS))
+			return
+		}
+		// Try path.html
+		htmlFile := path + ".html"
+		if f, err := webFS.Open(htmlFile); err == nil {
+			f.Close()
+			c.FileFromFS(htmlFile, http.FS(webFS))
+			return
+		}
+		// Try path/index.html
+		indexInDir := filepath.Join(path, "index.html")
+		if f, err := webFS.Open(indexInDir); err == nil {
+			f.Close()
+			c.FileFromFS(indexInDir, http.FS(webFS))
+			return
+		}
+		c.FileFromFS("index.html", http.FS(webFS))
 	}
 }
 
@@ -174,21 +217,33 @@ func (s *Server) setupRoutes() *gin.Engine {
 		self.PATCH("/config", controllers.UserConfigPatch)
 	}
 
-	// Serve Next.js static export (when Download enabled and web/out exists)
+	// Serve Next.js static export (when Download enabled): prefer embedded FS, else disk
 	if selfDevice := models.GetSelfDevice(); selfDevice != nil && selfDevice.Download {
-		webRoot := filepath.Join(tool.GetRunPositionDir(), WebOutPath)
-		indexPage := filepath.Join(webRoot, "index.html")
-		if _, err := os.Stat(indexPage); err == nil {
-			engine.StaticFile("/", indexPage)
-			nextStatic := filepath.Join(webRoot, "_next")
-			if _, err := os.Stat(nextStatic); err == nil {
-				engine.Static("/_next", nextStatic)
+		if embeddedWebFS != nil {
+			// Serve from embedded FS (web/out embedded at build time)
+			engine.GET("/", func(c *gin.Context) {
+				c.FileFromFS("index.html", http.FS(embeddedWebFS))
+			})
+			if subNext, err := fs.Sub(embeddedWebFS, "_next"); err == nil {
+				engine.StaticFS("/_next", http.FS(subNext))
 			}
-			// Serve sub-routes (e.g. /manage, /manage/about): try path.html then path/index.html, else fallback to index.html for SPA
-			engine.NoRoute(serveNextJSStatic(webRoot, indexPage))
-			tool.DefaultLogger.Infof("[Server] Serving download page from %s", WebOutPath)
+			engine.NoRoute(serveNextJSStaticFS(embeddedWebFS))
+			tool.DefaultLogger.Infof("[Server] Serving download page from embedded web UI")
 		} else {
-			tool.DefaultLogger.Warnf("[Server] Download page not found at %s - run 'cd web && npm run build' first", indexPage)
+			// Fallback: serve from disk (e.g. -useWebOutPath or dev)
+			webRoot := filepath.Join(tool.GetRunPositionDir(), WebOutPath)
+			indexPage := filepath.Join(webRoot, "index.html")
+			if _, err := os.Stat(indexPage); err == nil {
+				engine.StaticFile("/", indexPage)
+				nextStatic := filepath.Join(webRoot, "_next")
+				if _, err := os.Stat(nextStatic); err == nil {
+					engine.Static("/_next", nextStatic)
+				}
+				engine.NoRoute(serveNextJSStatic(webRoot, indexPage))
+				tool.DefaultLogger.Infof("[Server] Serving download page from %s", WebOutPath)
+			} else {
+				tool.DefaultLogger.Warnf("[Server] Download page not found at %s - run 'cd web && pnpm build' first", indexPage)
+			}
 		}
 	}
 
