@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/moyoez/localsend-go/tool"
 )
 
 var upgrader = websocket.Upgrader{
@@ -21,7 +22,11 @@ func HandleNotifyWS(hub *Hub) gin.HandlerFunc {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() {
+			if err := conn.Close(); err != nil {
+				tool.DefaultLogger.Errorf("Failed to close WebSocket connection: %v", err)
+			}
+		}()
 
 		hub.Register(conn)
 		defer hub.Unregister(conn)
